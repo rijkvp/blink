@@ -1,0 +1,17 @@
+[package]
+name = "blink"
+version = "0.1.0"
+authors = ["Rijk van Putten <rijk@rijkvp.nl>"]
+edition = "2021"
+description = "Minimal break notifier"
+
+[dependencies]
+chrono = "0.4"
+rdev = "0.5"
+rodio = { version = "0.15", default-features = false, features = ["flac", "vorbis"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
