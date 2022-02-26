@@ -23,8 +23,20 @@ jobs:
     - name: Install X11 dependencies
       run: sudo apt install xorg-dev
       
-    - name: Build
+    - name: Build (debug)
       run: cargo build --verbose
       
     - name: Run tests
       run: cargo test --verbose
+      
+    - name: Install release dependencies
+      run: sudo apt install upx-ucl
+    
+    - name: Build (release)
+      run: build.sh
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: linux-build
+        path: artifacts/blink
