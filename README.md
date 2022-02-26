@@ -1,16 +1,10 @@
 # Blink
 
-A <100 KB minimal break notifier program for Linux. 
-Helps you remeber to blink your eyes during long computer usage.
+A <1 MB minimal break notifier program. Helps you remeber to blink during long computer usage.
 
 ## Usage
 
-`blink [break interval] [sound path] [activity timeout]`
-
-- **Break interval:** Interval between breaks in seconds. Defaults to 25m / 1500s.
-- **Sound path:** Absolute path to a sound file to play on each break. Only supports OGG files. Defaults to none.
-- **Activity timeout:** The time the keyboard and mouse must be inactive for the timer to stop running. Defaults to 30s.
-
+TODO
 
 ## Building
 
