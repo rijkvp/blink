@@ -19,8 +19,8 @@ enum BreakType {
     Forced = 3,
 }
 
-const INTERVAL_BREAKS: [(u64, BreakType); 2] = [(20, BreakType::Short), (10, BreakType::Blink)];
-const CONSTANT_BREAKS: [(u64, BreakType); 2] = [(60, BreakType::Forced), (30, BreakType::Normal)];
+const INTERVAL_BREAKS: [(u64, BreakType); 2] = [(30*60, BreakType::Short), (15*60, BreakType::Blink)];
+const CONSTANT_BREAKS: [(u64, BreakType); 2] = [(120*60, BreakType::Forced), (60*60, BreakType::Normal)];
 const CONSTANT_BREAK_INTERVAL: u64 = 5;
 const ACTIVITY_TIMEOUT: u64 = 30;
 
