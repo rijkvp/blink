@@ -1,12 +1,15 @@
 #!/bin/sh
-path=target/x86_64-unknown-linux-gnu/release/blink
+name=blink
+target=x86_64-unknown-linux-gnu
+path=target/$target/release/$name
+echo "Building.."
 # Use nightly custom build settings
-cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release
-echo "Build size:" $(ls -lah $path | awk '{print $5}')
+cargo +nightly build -q -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target $target --release
+echo "Build size: $(ls -la $path | awk '{print $5}') bytes"
 strip $path
-echo "Stripped size:" $(ls -lah $path | awk '{print $5}')
+echo "Stripped size: $(ls -la $path | awk '{print $5}') bytes"
 # Cheat with UPX to optimize binary size
-upx --best --lzma $path
-echo "Optimized size:" $(ls -lah $path | awk '{print $5}')
+upx -q --best --lzma $path
+echo "Optimized size: $(ls -la $path | awk '{print $5}') bytes"
 # Install the binary
-cp $path ~/.local/bin/blink
+cp $path ~/.local/bin/$name

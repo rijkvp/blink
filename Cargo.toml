@@ -6,9 +6,9 @@ edition = "2021"
 description = "Minimal break notifier"
 
 [dependencies]
-chrono = "0.4"
 rdev = "0.5"
-rodio = { version = "0.15", default-features = false, features = ["flac", "vorbis"] }
+rodio = { version = "0.15", default-features = false, features = ["vorbis"] }
+notify-rust = "4.5"
 
 [profile.release]
 lto = true
