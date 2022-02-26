@@ -1,7 +1,7 @@
 #!/bin/sh
 name=blink
 target=x86_64-unknown-linux-gnu
-path=target/$target/release/$name
+path=./target/$target/release/$name
 # Use nightly custom build settings
 cargo +nightly build --verbose -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target $target --release
 echo "Build size: $(ls -la $path | awk '{print $5}') bytes"
