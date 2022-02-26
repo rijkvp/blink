@@ -33,7 +33,7 @@ jobs:
       run: sudo apt install upx-ucl
     
     - name: Build (release)
-      run: build.sh
+      run: ./build.sh
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v2
