@@ -12,6 +12,7 @@ notify-rust = "4.5"
 
 [profile.release]
 lto = true
+strip = true
 codegen-units = 1
 opt-level = "z"
 panic = "abort"
