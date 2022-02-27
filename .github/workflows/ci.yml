@@ -32,6 +32,13 @@ jobs:
     - name: Install release dependencies
       run: sudo apt install upx-ucl
     
+    - name: Install Rust nightly 
+      uses: actions-rs/toolchain@v1
+      with:
+        target: x86_64-unknown-linux-gnu
+        toolchain: nightly
+        profile: minimal
+        
     - name: Build (release)
       run: ./build.sh
       
