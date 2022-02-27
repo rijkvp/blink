@@ -61,10 +61,10 @@ jobs:
         args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release --verbose
     
     - name: Compress binary
-      run: upx --best --lzma $GITHUB_WORKSPACE/target/release/blink
+      run: upx --best --lzma $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v2
       with:
         name: blink_linux-x86_64-gnu
-        path: target/release/blink
+        path: target/x86_64-unknown-linux-gnu/release
