@@ -10,33 +10,43 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  debug:
+      runs-on: ubuntu-latest
+      steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install dependenciecs (debug)
+        run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev
 
+      - name: Build (debug)
+        run: cargo build --verbose
+      
+      - name: Run tests
+        run: cargo test --verbose
+      
+  release-build:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     
-    - name: Install ALSA dependencies
-      run: sudo apt install --no-install-recommends -y libasound2-dev
-      
-    - name: Install X11 dependencies
-      run: sudo apt install xorg-dev
-      
-    - name: Build (debug)
-      run: cargo build --verbose
-      
-    - name: Run tests
-      run: cargo test --verbose
-      
-    - name: Install release dependencies
-      run: sudo apt install upx-ucl
+    - name: Install dependenciecs (release)
+      run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev upx-ucl
     
-    - name: Build (release)
-      run: ./build.sh
-      
+    - name: Install Rust nightly 
+      uses: actions-rs/toolchain@v1
+      with:
+        target: x86_64-unknown-linux-gnu
+        toolchain: nightly
+        profile: minimal
+        override: true
+
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose --release
+          
     - name: Upload build artifacts
       uses: actions/upload-artifact@v2
       with:
         name: linux-build
-        path: artifacts/blink
+        path: target/release/blink
