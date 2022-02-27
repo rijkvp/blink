@@ -45,7 +45,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: build
-        args: build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --release --verbose
+        args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --release --verbose
     
     - name: Compress binary
       run: upx --best --lzma target/release/blink
