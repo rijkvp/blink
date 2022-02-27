@@ -17,12 +17,25 @@ jobs:
       
       - name: Install dependenciecs (debug)
         run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev
-
-      - name: Build (debug)
-        run: cargo build --verbose
       
-      - name: Run tests
-        run: cargo test --verbose
+      - name: Install Rust 
+        uses: actions-rs/toolchain@v1
+        with:
+          target: x86_64-unknown-linux-gnu
+          toolchain: stable
+          profile: minimal
+          
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose
+      
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
       
   release-build:
     runs-on: ubuntu-latest
@@ -45,7 +58,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: build
-        args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --release --verbose
+        args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release --verbose
     
     - name: Compress binary
       run: upx --best --lzma target/release/blink
