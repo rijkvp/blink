@@ -6,7 +6,10 @@ use std::{
     fs::File,
     io::BufReader,
     path::PathBuf,
-    sync::{mpsc::{self, Sender}, Arc, RwLock},
+    sync::{
+        mpsc::{self, Sender},
+        Arc, RwLock,
+    },
     thread::{self, sleep},
     time::{Duration, Instant, SystemTime},
 };
@@ -23,6 +26,7 @@ const INTERVAL_BREAKS: [(u64, BreakType); 2] = [(30*60, BreakType::Short), (15*6
 const CONSTANT_BREAKS: [(u64, BreakType); 2] = [(120*60, BreakType::Forced), (60*60, BreakType::Normal)];
 const CONSTANT_BREAK_INTERVAL: u64 = 5;
 const ACTIVITY_TIMEOUT: u64 = 30;
+const UPDATE_DELAY: u64 = 5;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -34,17 +38,18 @@ fn main() {
 
     let mut last_update = SystemTime::now();
     let mut timer = Duration::ZERO;
+    let mut time_left = 0;
+    let mut break_type = BreakType::Blink;
     let (tx, rx) = mpsc::channel();
     loop {
-        sleep(Duration::from_secs(1));
         let elapsed = last_update.elapsed().unwrap();
 
         let diff = last_activity.read().unwrap().elapsed();
         if diff < Duration::from_secs(ACTIVITY_TIMEOUT) {
             timer += elapsed;
         }
-
-        if let Some(break_type) = check_break(&timer) {
+        println!("Timer: {} ({})", timer.as_secs(), timer.as_secs_f32());
+        if timer.as_secs() >= time_left {
             println!("Break!! ({break_type:?}) \x07"); // \x07 will ring the terminal bell
 
             show_notification(tx.clone(), break_type.clone());
@@ -58,35 +63,57 @@ fn main() {
                     eprintln!("Sound file not found: {sound_file:?}");
                 }
             }
-        }
 
+            if let Some((new_time_left, new_break_type)) = next_break(&timer) {
+                time_left = new_time_left;
+                break_type = new_break_type;
+                println!("Next break: {break_type:?} over {time_left}s");
+            }
+        }
         if let Ok(break_type) = rx.try_recv() {
             if break_type > BreakType::Blink {
                 timer = Duration::ZERO;
+                println!("Reset timer");
             }
         }
 
         last_update = SystemTime::now();
+        sleep(Duration::from_secs(UPDATE_DELAY));
     }
 }
 
-fn check_break(timer: &Duration) -> Option<BreakType> {
+fn next_break(time: &Duration) -> Option<(u64, BreakType)> {
+    let mut breaks = Vec::new();
+
     // Constant breaks
     for (timeout, break_type) in CONSTANT_BREAKS {
-        if timer.as_secs() >= timeout {
-            if timer.as_secs() % CONSTANT_BREAK_INTERVAL == 0 {
-                return Some(break_type);
+        let time_left = {
+            // Before timeout
+            if time.as_secs() <= timeout {
+                timeout - time.as_secs()
             }
-        }
+            // After timeout: every constant interval
+            else {
+                CONSTANT_BREAK_INTERVAL - (time.as_secs() % CONSTANT_BREAK_INTERVAL)
+            }
+        };
+        breaks.push((time_left, break_type));
     }
-
     // Interval breaks
     for (interval, break_type) in INTERVAL_BREAKS {
-        if timer.as_secs() % interval == 0 {
-            return Some(break_type);
-        }
+        let time_left = interval - (time.as_secs() % interval);
+        breaks.push((time_left, break_type));
     }
 
+    // Sort first by time left and then by type
+    breaks.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
+
+    println!("BREAKS: {breaks:#?}");
+
+    // First item is the next break
+    if let Some(next) = breaks.first() {
+        return Some(next.clone());
+    }
     None
 }
 
