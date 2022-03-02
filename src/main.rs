@@ -12,7 +12,7 @@ use std::{
         Arc, RwLock,
     },
     thread::{self, sleep},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime}, process,
 };
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ struct Config {
     #[serde(with = "duration_format")]
     update_delay: Duration,
     sounds_folder: Option<PathBuf>,
-    #[serde(rename = "break")]
+    #[serde(default, rename = "break")]
     breaks: Vec<Break>,
 }
 
@@ -131,7 +131,7 @@ impl Default for Config {
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Config file location
+    /// Load config from custom path
     #[clap(short)]
     config_path: Option<PathBuf>,
 }
@@ -176,7 +176,7 @@ fn main() -> Result<(), Error> {
 struct Timer {
     timer: Duration,
     time_left: Duration,
-    curr_break: Break,
+    curr_break: Option<Break>,
     cfg: Config,
     sender: Sender<Break>,
     receiver: Receiver<Break>,
@@ -188,7 +188,7 @@ impl Timer {
         Self {
             timer: Duration::ZERO,
             time_left: Duration::MAX,
-            curr_break: config.breaks[0].clone(),
+            curr_break: None,
             cfg: config,
             sender,
             receiver,
@@ -200,6 +200,8 @@ impl Timer {
         start_activity_tracking(last_activity.clone());
 
         let mut last_update = SystemTime::now();
+
+        self.update_break();
 
         loop {
             let elapsed = last_update.elapsed().unwrap();
@@ -227,21 +229,23 @@ impl Timer {
     }
 
     fn start_break(&mut self) {
-        println!(
-            "Break: {} - {} \x07",
-            self.curr_break.title, self.curr_break.description
-        ); // \x07 will ring the terminal bell
+        if let Some(break_info) = &self.curr_break {
+            println!(
+                "Break: {} - {} \x07",
+                break_info.title, break_info.description
+            ); // \x07 will ring the terminal bell
 
-        show_notification(self.curr_break.clone(), self.sender.clone());
+            show_notification(break_info.clone(), self.sender.clone());
 
-        if let (Some(sound_folder), Some(sound_filename)) =
-            (&self.cfg.sounds_folder, &self.curr_break.sound_file)
-        {
-            let sound_file = PathBuf::from(&sound_folder).join(sound_filename);
-            if sound_file.exists() {
-                play_audio_file(sound_file.to_str().unwrap());
-            } else {
-                eprintln!("Sound file not found: {sound_file:?}");
+            if let (Some(sound_folder), Some(sound_filename)) =
+                (&self.cfg.sounds_folder, &break_info.sound_file)
+            {
+                let sound_file = PathBuf::from(&sound_folder).join(sound_filename);
+                if sound_file.exists() {
+                    play_audio_file(sound_file.to_str().unwrap());
+                } else {
+                    eprintln!("Sound file not found: {sound_file:?}");
+                }
             }
         }
     }
@@ -275,9 +279,10 @@ impl Timer {
             println!("Next break: {} over {:?}", next_break.title, next_duration);
 
             self.time_left = self.timer + *next_duration;
-            self.curr_break = next_break.clone().clone();
+            self.curr_break = Some(next_break.clone().clone());
         } else {
-            eprintln!("No break found!");
+            eprintln!("No breaks found. Specify at least one break in the config!");
+            process::exit(1);
         }
     }
 }
