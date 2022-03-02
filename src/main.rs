@@ -4,7 +4,7 @@ use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::{self, File},
     io::BufReader,
     path::PathBuf,
     sync::{
@@ -15,39 +15,112 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct Break {
-    id: String,
-    interval: Duration,
-    timeout: Option<Duration>,
-    weight: u8,
-    resets_timer: bool,
     title: String,
     description: String,
-    sound: Option<String>,
+    sound_file: Option<PathBuf>,
+    #[serde(with = "duration_format")]
+    interval: Duration,
+    #[serde(default, with = "duration_format_option")]
+    timeout: Option<Duration>,
+    weight: u8,
+    #[serde(default)]
+    reset_timer: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
-    breaks: Vec<Break>,
+    #[serde(with = "duration_format")]
     activity_timeout: Duration,
+    #[serde(with = "duration_format")]
     update_delay: Duration,
     sounds_folder: Option<PathBuf>,
+    #[serde(rename = "break")]
+    breaks: Vec<Break>,
+}
+
+mod duration_format {
+    use std::time::Duration;
+
+    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&duration.as_secs().to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str = String::deserialize(deserializer)?;
+        let secs = str.parse().map_err(Error::custom)?;
+        Ok(Duration::from_secs(secs))
+    }
+}
+mod duration_format_option {
+    use std::time::Duration;
+
+    use serde::{de::Error, Deserializer, Serializer};
+
+    use crate::duration_format;
+
+    pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match duration {
+            Some(dur) => duration_format::serialize(dur, serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match duration_format::deserialize(deserializer) {
+            Ok(dur) => Ok(Some(dur)),
+            Err(err) => Err(Error::custom(err)),
+        }
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            breaks: vec![Break {
-                id: "test".to_string(),
-                interval: Duration::from_secs(15),
-                timeout: None,
-                weight: 1,
-                resets_timer: true,
-                title: "Test".to_string(),
-                description: "This is just for testing.".to_string(),
-                sound: None,
-            }],
+            breaks: vec![
+                Break {
+                    interval: Duration::from_secs(60 * 15),
+                    timeout: None,
+                    weight: 0,
+                    reset_timer: false,
+                    title: "Blink".to_string(),
+                    description: "Blink your eyes.".to_string(),
+                    sound_file: Some(PathBuf::from("blink.ogg")),
+                },
+                Break {
+                    interval: Duration::from_secs(60 * 30),
+                    timeout: None,
+                    weight: 1,
+                    reset_timer: true,
+                    title: "Small break".to_string(),
+                    description: "Take a small break".to_string(),
+                    sound_file: Some(PathBuf::from("break.ogg")),
+                },
+                Break {
+                    interval: Duration::from_secs(5 * 60),
+                    timeout: Some(Duration::from_secs(90 * 60)),
+                    weight: 2,
+                    reset_timer: true,
+                    title: "Big break".to_string(),
+                    description: "Take a big break".to_string(),
+                    sound_file: Some(PathBuf::from("break.ogg")),
+                },
+            ],
             activity_timeout: Duration::from_secs(20),
             update_delay: Duration::from_secs(1),
             sounds_folder: None,
@@ -60,13 +133,44 @@ impl Default for Config {
 struct Args {
     /// Config file location
     #[clap(short)]
-    config_path: Option<String>,
+    config_path: Option<PathBuf>,
 }
 
-fn main() {
-    let config = Config::default();
+#[derive(Debug)]
+enum Error {
+    FileSystem(String),
+    Configfile(String),
+    Fatal(String),
+}
 
-    Timer::new(config).start()
+fn main() -> Result<(), Error> {
+    let args = Args::parse();
+    let config = {
+        let config_path = args.config_path.unwrap_or({
+            dirs::config_dir()
+                .ok_or(Error::Fatal(
+                    "No config directory found on your system.".to_string(),
+                ))?
+                .join("blink.toml")
+        });
+
+        if config_path.exists() {
+            let config_str =
+                fs::read_to_string(config_path).map_err(|e| Error::FileSystem(e.to_string()))?;
+            toml::from_str(&config_str).map_err(|e| Error::Configfile(e.to_string()))?
+        } else {
+            println!("Config file not found. Generating default configuration..");
+            let default_config = Config::default();
+            let config_str = toml::to_string(&default_config)
+                .map_err(|e| Error::Fatal(format!("Failed to serialize default config: {e}")))?;
+            fs::write(config_path, &config_str).map_err(|e| Error::FileSystem(e.to_string()))?;
+            default_config
+        }
+    };
+
+    Timer::new(config).start();
+
+    Ok(())
 }
 
 struct Timer {
@@ -83,7 +187,7 @@ impl Timer {
         let (sender, receiver) = mpsc::channel();
         Self {
             timer: Duration::ZERO,
-            time_left: Duration::ZERO,
+            time_left: Duration::MAX,
             curr_break: config.breaks[0].clone(),
             cfg: config,
             sender,
@@ -131,7 +235,7 @@ impl Timer {
         show_notification(self.curr_break.clone(), self.sender.clone());
 
         if let (Some(sound_folder), Some(sound_filename)) =
-            (&self.cfg.sounds_folder, &self.curr_break.sound)
+            (&self.cfg.sounds_folder, &self.curr_break.sound_file)
         {
             let sound_file = PathBuf::from(&sound_folder).join(sound_filename);
             if sound_file.exists() {
