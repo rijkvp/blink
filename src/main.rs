@@ -1,129 +1,191 @@
+use clap::Parser;
 use notify_rust::Notification;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
+use serde::{Deserialize, Serialize};
 use std::{
-    env,
     fs::File,
     io::BufReader,
     path::PathBuf,
     sync::{
-        mpsc::{self, Sender},
+        mpsc::{self, Receiver, Sender},
         Arc, RwLock,
     },
     thread::{self, sleep},
     time::{Duration, Instant, SystemTime},
 };
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-enum BreakType {
-    Blink = 0,
-    Short = 1,
-    Normal = 2,
-    Forced = 3,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Break {
+    id: String,
+    interval: Duration,
+    timeout: Option<Duration>,
+    weight: u8,
+    resets_timer: bool,
+    title: String,
+    description: String,
+    sound: Option<String>,
 }
 
-const INTERVAL_BREAKS: [(u64, BreakType); 2] = [(30*60, BreakType::Short), (15*60, BreakType::Blink)];
-const CONSTANT_BREAKS: [(u64, BreakType); 2] = [(120*60, BreakType::Forced), (60*60, BreakType::Normal)];
-const CONSTANT_BREAK_INTERVAL: u64 = 5;
-const ACTIVITY_TIMEOUT: u64 = 30;
-const UPDATE_DELAY: u64 = 5;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Config {
+    breaks: Vec<Break>,
+    activity_timeout: Duration,
+    update_delay: Duration,
+    sounds_folder: Option<PathBuf>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            breaks: vec![Break {
+                id: "test".to_string(),
+                interval: Duration::from_secs(15),
+                timeout: None,
+                weight: 1,
+                resets_timer: true,
+                title: "Test".to_string(),
+                description: "This is just for testing.".to_string(),
+                sound: None,
+            }],
+            activity_timeout: Duration::from_secs(20),
+            update_delay: Duration::from_secs(1),
+            sounds_folder: None,
+        }
+    }
+}
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Config file location
+    #[clap(short)]
+    config_path: Option<String>,
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let config = Config::default();
 
-    let sound_path = args.get(1).to_owned();
+    Timer::new(config).start()
+}
 
-    let last_activity = Arc::new(RwLock::new(Instant::now()));
-    start_activity_tracking(last_activity.clone());
+struct Timer {
+    timer: Duration,
+    time_left: Duration,
+    curr_break: Break,
+    cfg: Config,
+    sender: Sender<Break>,
+    receiver: Receiver<Break>,
+}
 
-    let mut last_update = SystemTime::now();
-    let mut timer = Duration::ZERO;
-    let mut time_left = 0;
-    let mut break_type = BreakType::Blink;
-    let (tx, rx) = mpsc::channel();
-    loop {
-        let elapsed = last_update.elapsed().unwrap();
-
-        let diff = last_activity.read().unwrap().elapsed();
-        if diff < Duration::from_secs(ACTIVITY_TIMEOUT) {
-            timer += elapsed;
+impl Timer {
+    pub fn new(config: Config) -> Self {
+        let (sender, receiver) = mpsc::channel();
+        Self {
+            timer: Duration::ZERO,
+            time_left: Duration::ZERO,
+            curr_break: config.breaks[0].clone(),
+            cfg: config,
+            sender,
+            receiver,
         }
-        println!("Timer: {} ({})", timer.as_secs(), timer.as_secs_f32());
-        if timer.as_secs() >= time_left {
-            println!("Break!! ({break_type:?}) \x07"); // \x07 will ring the terminal bell
+    }
 
-            show_notification(tx.clone(), break_type.clone());
+    fn start(&mut self) {
+        let last_activity = Arc::new(RwLock::new(Instant::now()));
+        start_activity_tracking(last_activity.clone());
 
-            if let Some(sound_folder) = sound_path {
-                let sound_file = PathBuf::from(&sound_folder)
-                    .join(format!("{break_type:?}").to_lowercase() + ".ogg");
-                if sound_file.exists() {
-                    play_audio_file(sound_file.to_str().unwrap());
-                } else {
-                    eprintln!("Sound file not found: {sound_file:?}");
+        let mut last_update = SystemTime::now();
+
+        loop {
+            let elapsed = last_update.elapsed().unwrap();
+
+            let diff = last_activity.read().unwrap().elapsed();
+            if diff < self.cfg.activity_timeout {
+                self.timer += elapsed;
+            }
+
+            if self.timer >= self.time_left {
+                self.start_break();
+                self.update_break();
+            }
+            if let Ok(break_ref) = self.receiver.try_recv() {
+                if break_ref.weight > 0 {
+                    self.timer = Duration::ZERO;
+                    println!("Reset timer");
+                    self.update_break();
                 }
             }
 
-            if let Some((new_time_left, new_break_type)) = next_break(&timer) {
-                time_left = new_time_left;
-                break_type = new_break_type;
-                println!("Next break: {break_type:?} over {time_left}s");
-            }
+            last_update = SystemTime::now();
+            sleep(self.cfg.update_delay);
         }
-        if let Ok(break_type) = rx.try_recv() {
-            if break_type > BreakType::Blink {
-                timer = Duration::ZERO;
-                println!("Reset timer");
-            }
-        }
-
-        last_update = SystemTime::now();
-        sleep(Duration::from_secs(UPDATE_DELAY));
     }
-}
 
-fn next_break(time: &Duration) -> Option<(u64, BreakType)> {
-    let mut breaks = Vec::new();
+    fn start_break(&mut self) {
+        println!(
+            "Break: {} - {} \x07",
+            self.curr_break.title, self.curr_break.description
+        ); // \x07 will ring the terminal bell
 
-    // Constant breaks
-    for (timeout, break_type) in CONSTANT_BREAKS {
-        let time_left = {
+        show_notification(self.curr_break.clone(), self.sender.clone());
+
+        if let (Some(sound_folder), Some(sound_filename)) =
+            (&self.cfg.sounds_folder, &self.curr_break.sound)
+        {
+            let sound_file = PathBuf::from(&sound_folder).join(sound_filename);
+            if sound_file.exists() {
+                play_audio_file(sound_file.to_str().unwrap());
+            } else {
+                eprintln!("Sound file not found: {sound_file:?}");
+            }
+        }
+    }
+
+    fn update_break(&mut self) {
+        let mut breaks = Vec::new();
+
+        for break_item in self.cfg.breaks.iter() {
+            let mut in_timeout = false;
+            let mut time_left = Duration::MAX;
             // Before timeout
-            if time.as_secs() <= timeout {
-                timeout - time.as_secs()
+            if let Some(timeout) = break_item.timeout {
+                if self.timer <= timeout {
+                    time_left = timeout - self.timer;
+                    in_timeout = true;
+                }
             }
-            // After timeout: every constant interval
-            else {
-                CONSTANT_BREAK_INTERVAL - (time.as_secs() % CONSTANT_BREAK_INTERVAL)
+            if !in_timeout {
+                // After timeout: every constant interval
+                time_left = break_item.interval
+                    - Duration::from_secs(self.timer.as_secs() % break_item.interval.as_secs())
             }
-        };
-        breaks.push((time_left, break_type));
-    }
-    // Interval breaks
-    for (interval, break_type) in INTERVAL_BREAKS {
-        let time_left = interval - (time.as_secs() % interval);
-        breaks.push((time_left, break_type));
-    }
+            breaks.push((time_left, break_item));
+        }
 
-    // Sort first by time left and then by type
-    breaks.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.partial_cmp(&a.1).unwrap()));
+        // Sort first by time left and then by type
+        breaks.sort_by(|a: &(Duration, &Break), b| a.0.cmp(&b.0).then(b.1.weight.cmp(&a.1.weight)));
 
-    println!("BREAKS: {breaks:#?}");
+        // First item is the next break
+        if let Some((next_duration, next_break)) = breaks.first() {
+            println!("Next break: {} over {:?}", next_break.title, next_duration);
 
-    // First item is the next break
-    if let Some(next) = breaks.first() {
-        return Some(next.clone());
+            self.time_left = self.timer + *next_duration;
+            self.curr_break = next_break.clone().clone();
+        } else {
+            eprintln!("No break found!");
+        }
     }
-    None
 }
 
-fn show_notification(sender: Sender<BreakType>, break_type: BreakType) {
+/// Displays a notification with the break info
+fn show_notification(break_info: Break, callback: Sender<Break>) {
     thread::spawn(move || {
         let mut is_clicked = false;
         Notification::new()
             .appname("blink")
-            .summary(&format!("{break_type:?} break"))
-            .body("Time to take a break!")
+            .summary(&break_info.title)
+            .body(&break_info.description)
             .action("default", "Complete")
             .show()
             .unwrap()
@@ -134,12 +196,12 @@ fn show_notification(sender: Sender<BreakType>, break_type: BreakType) {
                 _ => (),
             });
         if is_clicked {
-            sender.send(break_type).unwrap();
+            callback.send(break_info).unwrap();
         }
     });
 }
 
-// Keep track of the last input activities
+/// Starts a thread to keep track of the last input activities
 fn start_activity_tracking(last_activity: Arc<RwLock<Instant>>) {
     thread::spawn(move || {
         if let Err(error) = listen(move |_event| {
@@ -150,7 +212,7 @@ fn start_activity_tracking(last_activity: Arc<RwLock<Instant>>) {
     });
 }
 
-/// Load and plays an audio file in a new thread
+/// Loads and plays an audio file in a new thread
 fn play_audio_file(sound_path: &str) {
     let path_clone = sound_path.to_owned().clone();
     thread::spawn(move || {
