@@ -12,6 +12,7 @@ env:
 jobs:
   debug:
       runs-on: ubuntu-latest
+      if: "!contains(github.event.head_commit.message, 'ci skip')"
       steps:
       - uses: actions/checkout@v2
       
@@ -36,35 +37,3 @@ jobs:
         with:
           command: test
           args: --verbose
-      
-  release-build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    
-    - name: Install dependenciecs (release)
-      run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev upx-ucl
-    
-    - name: Install Rust nightly 
-      uses: actions-rs/toolchain@v1
-      with:
-        target: x86_64-unknown-linux-gnu
-        toolchain: nightly
-        profile: minimal
-        components: rust-src
-        override: true
-
-    - name: Release build
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release --verbose
-    
-    - name: Compress binary
-      run: upx --best --lzma $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink
-    
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v2
-      with:
-        name: blink_linux-x86_64-gnu
-        path: target/x86_64-unknown-linux-gnu/release/blink
