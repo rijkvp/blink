@@ -4,6 +4,13 @@ version = "0.2.0"
 authors = ["Rijk van Putten <rijk@rijkvp.nl>"]
 edition = "2021"
 description = "Minimal break notifier"
+readme = "README.md"
+homepage = "https://github.com/rijkvp/blink"
+license = "GPL-3.0"
+keywords = ["break-timer", "break", "timer", "notifier"]
+categories = ["command-line-utilities"]
+
+
 
 [dependencies]
 rdev = "0.5"
