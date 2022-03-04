@@ -1,5 +1,7 @@
 # Blink
 
+[![CI](https://github.com/rijkvp/blink/actions/workflows/ci.yml/badge.svg)](https://github.com/rijkvp/blink/actions/workflows/ci.yml)
+
 A <1 MB minimal break notifier program. Helps you remeber to blink during long computer usage.
 
 ## Installation
