@@ -7,12 +7,13 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::PathBuf,
+    process,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc, RwLock,
     },
     thread::{self, sleep},
-    time::{Duration, Instant, SystemTime}, process,
+    time::{Duration, Instant, SystemTime},
 };
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -332,6 +333,6 @@ fn play_audio_file(sound_path: &str) {
         stream_handle
             .play_raw(audio_source.convert_samples())
             .expect("Failed to play audio");
-        thread::sleep(Duration::from_secs(5)); // Wait some time to finish
+        thread::sleep(Duration::from_secs(20)); // Wait some time to make sure the sound finished playing
     });
 }

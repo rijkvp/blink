@@ -2,11 +2,12 @@
 
 A <1 MB minimal break notifier program. Helps you remeber to blink during long computer usage.
 
+## Installation
+
+You can download the latest executable from [GitHub releases](https://github.com/rijkvp/blink/releases).
+
+
 ## Usage
 
-TODO
+Run `blink` to start the timer. A default `blink.toml` config will be generated in your system config directory (`~/.config` on Linux) if not already present. You can specify a different config file using `blink -c [config file path]`.
 
-## Building
-
-I used some tricks from [min-sized-rust](https://github.com/johnthagen/min-sized-rust) to optimize the binary size.
-Use the `build.sh` script to build the program with optimized size results.
