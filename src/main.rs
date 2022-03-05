@@ -292,19 +292,32 @@ impl Timer {
 fn show_notification(break_info: Break, callback: Sender<Break>) {
     thread::spawn(move || {
         let mut is_clicked = false;
-        Notification::new()
-            .appname("blink")
-            .summary(&break_info.title)
-            .body(&break_info.description)
-            .action("default", "Complete")
-            .show()
-            .unwrap()
-            .wait_for_action(|action| match action {
-                "default" => {
-                    is_clicked = true;
-                }
-                _ => (),
-            });
+        #[cfg(windows)]
+        {
+            Notification::new()
+                .appname("blink")
+                .summary(&break_info.title)
+                .body(&break_info.description)
+                .show()
+                .unwrap()
+                .on_close(|reason| println!("closed: {:?}", reason));
+        }
+        #[cfg(not(windows))]
+        {
+            Notification::new()
+                .appname("blink")
+                .summary(&break_info.title)
+                .body(&break_info.description)
+                .action("default", "Complete")
+                .show()
+                .unwrap()
+                .wait_for_action(|action| match action {
+                    "default" => {
+                        is_clicked = true;
+                    }
+                    _ => (),
+                });
+        }
         if is_clicked {
             callback.send(break_info).unwrap();
         }
