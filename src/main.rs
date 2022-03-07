@@ -36,6 +36,8 @@ struct Config {
     activity_timeout: Duration,
     #[serde(with = "duration_format")]
     update_delay: Duration,
+    #[serde(with = "duration_format")]
+    inactive_reset: Duration,
     sounds_folder: Option<PathBuf>,
     #[serde(default, rename = "break")]
     breaks: Vec<Break>,
@@ -122,6 +124,7 @@ impl Default for Config {
                     sound_file: Some(PathBuf::from("break.ogg")),
                 },
             ],
+            inactive_reset: Duration::from_secs(120),
             activity_timeout: Duration::from_secs(20),
             update_delay: Duration::from_secs(1),
             sounds_folder: None,
@@ -202,31 +205,38 @@ impl Timer {
 
         let mut last_update = SystemTime::now();
 
-        self.update_break();
+        self.update_break(false);
 
         loop {
             let elapsed = last_update.elapsed().unwrap();
 
             let diff = last_activity.read().unwrap().elapsed();
+            if diff >= self.cfg.inactive_reset {
+                self.reset();
+            }
+
             if diff < self.cfg.activity_timeout {
                 self.timer += elapsed;
             }
 
             if self.timer >= self.time_left {
                 self.start_break();
-                self.update_break();
+                self.update_break(false);
             }
             if let Ok(break_ref) = self.receiver.try_recv() {
                 if break_ref.weight > 0 {
-                    self.timer = Duration::ZERO;
-                    println!("Reset timer");
-                    self.update_break();
+                    self.reset();
                 }
             }
 
             last_update = SystemTime::now();
             sleep(self.cfg.update_delay);
         }
+    }
+
+    fn reset(&mut self) {
+        self.timer = Duration::ZERO;
+        self.update_break(true);
     }
 
     fn start_break(&mut self) {
@@ -251,7 +261,7 @@ impl Timer {
         }
     }
 
-    fn update_break(&mut self) {
+    fn update_break(&mut self, hide_msg: bool) {
         let mut breaks = Vec::new();
 
         for break_item in self.cfg.breaks.iter() {
@@ -277,7 +287,9 @@ impl Timer {
 
         // First item is the next break
         if let Some((next_duration, next_break)) = breaks.first() {
-            println!("Next break: {} over {:?}", next_break.title, next_duration);
+            if !hide_msg {
+                println!("Next break: {} over {:?}", next_break.title, next_duration);
+            }
 
             self.time_left = self.timer + *next_duration;
             self.curr_break = Some(next_break.clone().clone());
@@ -292,7 +304,7 @@ impl Timer {
 fn show_notification(break_info: Break, callback: Sender<Break>) {
     thread::spawn(move || {
         let mut is_clicked = false;
-        #[cfg(not(target_os="linux"))]
+        #[cfg(not(target_os = "linux"))]
         {
             Notification::new()
                 .appname("blink")
@@ -301,7 +313,7 @@ fn show_notification(break_info: Break, callback: Sender<Break>) {
                 .show()
                 .unwrap();
         }
-        #[cfg(target_os="linux")]
+        #[cfg(target_os = "linux")]
         {
             Notification::new()
                 .appname("blink")
