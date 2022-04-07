@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-        - "v*"
+      - "v*"
 
 jobs:
   tagged-release:
@@ -11,36 +11,52 @@ jobs:
     runs-on: "ubuntu-latest"
 
     steps:
-    - uses: actions/checkout@v2
-    
-    - name: Install dependenciecs (release)
-      run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev upx-ucl
-    
-    - name: Install Rust nightly 
-      uses: actions-rs/toolchain@v1
-      with:
-        target: x86_64-unknown-linux-gnu
-        toolchain: nightly
-        profile: minimal
-        components: rust-src
-        override: true
+      - uses: actions/checkout@v2
 
-    - name: Release build
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-unknown-linux-gnu --release --verbose
-    
-    - name: Compress binary
-      run: upx --best --lzma $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink-timer
+      - name: Install dependenciecs (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt install --no-install-recommends -y libasound2-dev xorg-dev upx-ucl
 
-    - name: Rename binary
-      run: cp $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink-timer $GITHUB_WORKSPACE/blink-linux-x86_64-${{ github.ref_name }}
-    
-    - name: Create release 
-      uses: "marvinpinto/action-automatic-releases@latest"
-      with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        prerelease: false
-        files:
-          blink-linux-x86_64-${{ github.ref_name }}
+      - name: Install dependenciecs (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install upx -y
+
+      - name: Set OS build target
+        run:  |
+              echo "ARCHITECTURE=x86_64" >> $GITHUB_ENV
+              if [ "$RUNNER_OS" == "Linux" ]; then
+                  echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+              elif [ "$RUNNER_OS" == "Windows" ]; then
+                  echo "TARGET=x86_64-pc-windows-msvc" >> $GITHUB_ENV
+              else
+                  echo "$RUNNER_OS not supported"
+              fi
+        shell: bash
+
+      - name: Install Rust nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          target: ${{ env.TARGET }}
+          toolchain: nightly
+          profile: minimal
+          components: rust-src
+          override: true
+
+      - name: Release build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target  ${{ env.TARGET }} --release --verbose
+
+      - name: Compress binary
+        run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
+
+      - name: Rename binary
+        run: cp $GITHUB_WORKSPACE/target/ ${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
+
+      - name: Create release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
