@@ -33,11 +33,13 @@ struct Break {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
     #[serde(with = "duration_format")]
-    activity_timeout: Duration,
-    #[serde(with = "duration_format")]
     update_delay: Duration,
     #[serde(with = "duration_format")]
-    inactive_reset: Duration,
+    input_timeout: Duration,
+    #[serde(with = "duration_format")]
+    input_reset: Duration,
+    #[serde(with = "duration_format")]
+    timeout_reset: Duration,
     sounds_folder: Option<PathBuf>,
     #[serde(default, rename = "break")]
     breaks: Vec<Break>,
@@ -124,10 +126,11 @@ impl Default for Config {
                     sound_file: Some(PathBuf::from("break.ogg")),
                 },
             ],
-            inactive_reset: Duration::from_secs(120),
-            activity_timeout: Duration::from_secs(20),
-            update_delay: Duration::from_secs(1),
             sounds_folder: None,
+            update_delay: Duration::from_secs(1),
+            input_timeout: Duration::from_secs(20),
+            input_reset: Duration::from_secs(120),
+            timeout_reset: Duration::from_secs(200),
         }
     }
 }
@@ -163,7 +166,7 @@ fn main() -> Result<(), Error> {
                 fs::read_to_string(config_path).map_err(|e| Error::FileSystem(e.to_string()))?;
             toml::from_str(&config_str).map_err(|e| Error::Configfile(e.to_string()))?
         } else {
-            println!("Config file not found. Generating default configuration..");
+            println!("Created default configuration at {config_path:?}");
             let default_config = Config::default();
             let config_str = toml::to_string(&default_config)
                 .map_err(|e| Error::Fatal(format!("Failed to serialize default config: {e}")))?;
@@ -183,47 +186,62 @@ struct Timer {
     curr_break: Option<Break>,
     cfg: Config,
     sender: Sender<Break>,
-    receiver: Receiver<Break>,
+    reset_receiver: Receiver<Break>,
 }
 
 impl Timer {
     pub fn new(config: Config) -> Self {
-        let (sender, receiver) = mpsc::channel();
+        let (reset_sender, receiver) = mpsc::channel();
         Self {
             timer: Duration::ZERO,
             time_left: Duration::MAX,
             curr_break: None,
             cfg: config,
-            sender,
-            receiver,
+            sender: reset_sender,
+            reset_receiver: receiver,
         }
     }
 
     fn start(&mut self) {
-        let last_activity = Arc::new(RwLock::new(Instant::now()));
-        start_activity_tracking(last_activity.clone());
+        let last_input = Arc::new(RwLock::new(Instant::now()));
+        start_input_tracking(last_input.clone());
 
         let mut last_update = SystemTime::now();
 
         self.update_break(false);
 
+        // Main application loop
         loop {
             let elapsed = last_update.elapsed().unwrap();
 
-            let diff = last_activity.read().unwrap().elapsed();
-            if diff >= self.cfg.inactive_reset {
+            // Reset timer if the time since last update is greater than the timeout delay
+            // This is probably caused by a system suspend
+            if elapsed >= self.cfg.timeout_reset {
+                println!("Resetting timer (timeout)");
                 self.reset();
             }
 
-            if diff < self.cfg.activity_timeout {
+            // Reset timer if time since last input is greater than the input_reset threshold
+            let input_elapsed = last_input.read().unwrap().elapsed();
+            if input_elapsed >= self.cfg.input_reset {
+                println!("Resetting timer (input inactivity)");
+                self.reset();
+            }
+
+            // Timer only runs if there was input in the last input_timeout
+            if input_elapsed < self.cfg.input_timeout {
                 self.timer += elapsed;
             }
 
+            // Start a break when the timer reaches the current break's interval 
             if self.timer >= self.time_left {
                 self.start_break();
                 self.update_break(false);
             }
-            if let Ok(break_ref) = self.receiver.try_recv() {
+
+            // Reset timer if break received through the channel form another thread
+            if let Ok(break_ref) = self.reset_receiver.try_recv() {
+                // Breaks with a weight of 0 won't reset the timer
                 if break_ref.weight > 0 {
                     self.reset();
                 }
@@ -264,6 +282,7 @@ impl Timer {
     fn update_break(&mut self, hide_msg: bool) {
         let mut breaks = Vec::new();
 
+        // Determine the next break
         for break_item in self.cfg.breaks.iter() {
             let mut in_timeout = false;
             let mut time_left = Duration::MAX;
@@ -336,12 +355,12 @@ fn show_notification(break_info: Break, callback: Sender<Break>) {
 }
 
 /// Starts a thread to keep track of the last input activities
-fn start_activity_tracking(last_activity: Arc<RwLock<Instant>>) {
+fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
     thread::spawn(move || {
-        if let Err(error) = listen(move |_event| {
-            *last_activity.write().unwrap() = Instant::now();
+        if let Err(err) = listen(move |_event| {
+            *last_input.write().unwrap() = Instant::now();
         }) {
-            println!("Error: {:?}", error)
+            eprintln!("Error while tracking input: {err:?}")
         }
     });
 }
