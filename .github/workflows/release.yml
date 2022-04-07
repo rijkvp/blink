@@ -35,7 +35,7 @@ jobs:
       run: upx --best --lzma $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink-timer
 
     - name: Rename binary
-      run: cp $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink-timer $GITHUB_WORKSPACE/blink-linux-x86_64-{{ github.ref_name }}
+      run: cp $GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release/blink-timer $GITHUB_WORKSPACE/blink-linux-x86_64-${{ github.ref_name }}
     
     - name: Create release 
       uses: "marvinpinto/action-automatic-releases@latest"
@@ -43,4 +43,4 @@ jobs:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         prerelease: false
         files:
-          blink-linux-x86_64-{{ github.ref_name }}
+          blink-linux-x86_64-${{ github.ref_name }}
