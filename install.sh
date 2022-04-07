@@ -1,5 +1,5 @@
 #!/bin/sh
-name=blink
+name=blink-timer
 target=x86_64-unknown-linux-gnu
 path=./target/$target/release/$name
 
