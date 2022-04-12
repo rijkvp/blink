@@ -73,7 +73,7 @@ jobs:
           if [ "$RUNNER_OS" == "Windows" ]; then
             OUTPUT="$GITHUB_WORKSPACE\target\${{ env.TARGET }}\release\blink-timer.exe"
             FILE_NAME="blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest.exe"
-            FILE_PATH="$GITHUB_WORKSPACE\$FILE_NAME"
+            FILE_PATH="$GITHUB_WORKSPACE\\$FILE_NAME"
           else
             OUTPUT="$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer"
             FILE_NAME="blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest"
