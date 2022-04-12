@@ -67,18 +67,27 @@ jobs:
           command: build
           args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target  ${{ env.TARGET }} --release --verbose
 
-      - name: Compress binary
-        run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
-        shell: bash
-
       - name: Rename binary
-        run: cp $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            OUTPUT=$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer.exe
+            FILE_NAME=$GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest.exe
+          else
+            OUTPUT=$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
+            FILE_NAME=$GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+          fi 
+          echo $FILE_NAME >> $GITHUB_ENV
+          cp $OUTPUT $FILE_NAME
+        shell: bash
+      
+      - name: Compress binary
+        run: upx --best --lzma $FILE_NAME
         shell: bash
 
-      - name: Uplaod release assets 
+      - name: Upload release assets 
         uses: xresloader/upload-to-github-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           release_id: ${{ needs.create_dev_release.outputs.release_id }}
-          file: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+          file: ${{ env.FILE_NAME }}
