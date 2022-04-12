@@ -72,14 +72,14 @@ jobs:
           OS_NAME=$(echo $RUNNER_OS | tr '[:upper:]' '[:lower:]')
           if [ "$RUNNER_OS" == "Windows" ]; then
             OUTPUT="$GITHUB_WORKSPACE\target\${{ env.TARGET }}\release\blink-timer.exe"
-            FILE_NAME="$GITHUB_WORKSPACE\blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest.exe"
+            FILE_PATH="$GITHUB_WORKSPACE\blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest.exe"
           else
             OUTPUT="$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer"
-            FILE_NAME="$GITHUB_WORKSPACE/blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest"
+            FILE_PATH="$GITHUB_WORKSPACE/blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest"
           fi 
           echo "Output: $OUTPUT"
-          echo "File name: $FILE_NAME"
-          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_ENV
+          echo "File name: $FILE_PATH"
+          echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
           cp $OUTPUT $FILE_PATH
         shell: bash
       
@@ -93,4 +93,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           release_id: ${{ needs.create_dev_release.outputs.release_id }}
-          file: ${{ env.FILE_NAME }}
+          file: ${{ env.FILE_PATH }}
