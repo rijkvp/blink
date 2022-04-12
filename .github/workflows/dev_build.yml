@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  create_dev_release:
+    name: Create release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          tag_name: "latest"
+          prerelease: true
+          draft: false
+          name: "Development Build"
   dev_build:
     name: "Development Build"
     runs-on: ${{ matrix.os }}
@@ -54,15 +69,16 @@ jobs:
 
       - name: Compress binary
         run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
+        shell: bash
 
       - name: Rename binary
         run: cp $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+        shell: bash
 
-      - name: Create release
-        uses: "marvinpinto/action-automatic-releases@latest"
+      - name: Uplaod release assets 
+        uses: xresloader/upload-to-github-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: true
-          title: "Development Build"
-          files: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+          release_id: ${{ needs.create_dev_release.outputs.release_id }}
+          file: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
