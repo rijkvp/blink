@@ -56,7 +56,7 @@ jobs:
         run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
 
       - name: Rename binary
-        run: cp $GITHUB_WORKSPACE/target/ ${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
+        run: cp $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
 
       - name: Create release
         uses: "marvinpinto/action-automatic-releases@latest"
