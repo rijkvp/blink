@@ -1,13 +1,14 @@
-name: Release
+name: Development Build
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  tagged-release:
-    name: "Tagged Release"
+  dev_build:
+    name: "Development Build"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -22,15 +23,15 @@ jobs:
         run: choco install upx -y
 
       - name: Set OS build target
-        run:  |
-              echo "ARCHITECTURE=x86_64" >> $GITHUB_ENV
-              if [ "$RUNNER_OS" == "Linux" ]; then
-                  echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-              elif [ "$RUNNER_OS" == "Windows" ]; then
-                  echo "TARGET=x86_64-pc-windows-msvc" >> $GITHUB_ENV
-              else
-                  echo "$RUNNER_OS not supported"
-              fi
+        run: |
+          echo "ARCHITECTURE=x86_64" >> $GITHUB_ENV
+          if [ "$RUNNER_OS" == "Linux" ]; then
+              echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+              echo "TARGET=x86_64-pc-windows-msvc" >> $GITHUB_ENV
+          else
+              echo "$RUNNER_OS not supported"
+          fi
         shell: bash
 
       - name: Install Rust nightly
@@ -52,11 +53,13 @@ jobs:
         run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
 
       - name: Rename binary
-        run: cp $GITHUB_WORKSPACE/target/ ${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
+        run: cp $GITHUB_WORKSPACE/target/ ${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
 
       - name: Create release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "Development Build"
+          files: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-latest
