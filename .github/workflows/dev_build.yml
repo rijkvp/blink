@@ -7,21 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  create_dev_release:
-    name: Create release
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - name: Create release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
-          tag_name: "latest"
-          prerelease: true
-          draft: false
-          name: "Development Build"
   dev_build:
     name: "Development Build"
     runs-on: ${{ matrix.os }}
@@ -91,10 +76,8 @@ jobs:
         run: upx --best --lzma $FILE_PATH
         shell: bash
 
-      - name: Upload release assets 
-        uses: xresloader/upload-to-github-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Uppload release artifacts
+        uses: actions/upload-artifact@v3
         with:
-          release_id: ${{ needs.create_dev_release.outputs.release_id }}
-          file: ${{ env.FILE_NAME }}
+          name: ${{ env.FILE_NAME }}
+          path: ${{ env.FILE_NAME }}
