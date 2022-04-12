@@ -69,19 +69,22 @@ jobs:
 
       - name: Rename binary
         run: |
+          OS_NAME=$(echo $RUNNER_OS | tr '[:upper:]' '[:lower:]')
           if [ "$RUNNER_OS" == "Windows" ]; then
-            OUTPUT="$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer.exe"
-            FILE_NAME="$GITHUB_WORKSPACE/blink-$RUNNER_OS-${{ env.ARCHITECTURE }}-latest.exe"
+            OUTPUT="$GITHUB_WORKSPACE\target\${{ env.TARGET }}\release\blink-timer.exe"
+            FILE_NAME="$GITHUB_WORKSPACE\blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest.exe"
           else
             OUTPUT="$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer"
-            FILE_NAME="$GITHUB_WORKSPACE/blink-$RUNNER_OS-${{ env.ARCHITECTURE }}-latest"
+            FILE_NAME="$GITHUB_WORKSPACE/blink-$OS_NAME-${{ env.ARCHITECTURE }}-latest"
           fi 
+          echo "Output: $OUTPUT"
+          echo "File name: $FILE_NAME"
           echo "FILE_NAME=$FILE_NAME" >> $GITHUB_ENV
-          cp $OUTPUT $FILE_NAME
+          cp $OUTPUT $FILE_PATH
         shell: bash
       
       - name: Compress binary
-        run: upx --best --lzma $FILE_NAME
+        run: upx --best --lzma $FILE_PATH
         shell: bash
 
       - name: Upload release assets 
