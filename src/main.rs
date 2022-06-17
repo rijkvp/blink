@@ -1,4 +1,6 @@
 use clap::Parser;
+use env_logger::Env;
+use log::{info, error};
 use notify_rust::Notification;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
@@ -151,6 +153,8 @@ enum Error {
 }
 
 fn main() -> Result<(), Error> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     let args = Args::parse();
     let config = {
         let config_path = args.config_path.unwrap_or({
@@ -166,7 +170,7 @@ fn main() -> Result<(), Error> {
                 fs::read_to_string(config_path).map_err(|e| Error::FileSystem(e.to_string()))?;
             toml::from_str(&config_str).map_err(|e| Error::Configfile(e.to_string()))?
         } else {
-            println!("Created default configuration at {config_path:?}");
+            info!("Created default configuration at {config_path:?}");
             let default_config = Config::default();
             let config_str = toml::to_string(&default_config)
                 .map_err(|e| Error::Fatal(format!("Failed to serialize default config: {e}")))?;
@@ -212,25 +216,27 @@ impl Timer {
 
         // Main application loop
         loop {
-            let elapsed = last_update.elapsed().unwrap();
+            let mut time_elapsed = last_update.elapsed().unwrap();
 
             // Reset timer if the time since last update is greater than the timeout delay
             // This is probably caused by a system suspend
-            if elapsed >= self.cfg.timeout_reset {
-                println!("Resetting timer (timeout)");
+            if time_elapsed >= self.cfg.timeout_reset {
+                info!("Resetting timer (timeout)");
                 self.reset();
+                time_elapsed = Duration::ZERO;
             }
 
             // Reset timer if time since last input is greater than the input_reset threshold
             let input_elapsed = last_input.read().unwrap().elapsed();
             if input_elapsed >= self.cfg.input_reset {
-                println!("Resetting timer (input inactivity)");
+                info!("Resetting timer (input inactivity)");
                 self.reset();
             }
 
             // Timer only runs if there was input in the last input_timeout
             if input_elapsed < self.cfg.input_timeout {
-                self.timer += elapsed;
+                self.timer += time_elapsed;
+                info!("TIMER: {:?}", self.timer);
             }
 
             // Start a break when the timer reaches the current break's interval 
@@ -253,13 +259,14 @@ impl Timer {
     }
 
     fn reset(&mut self) {
+        info!("Reset timer.");
         self.timer = Duration::ZERO;
         self.update_break(true);
     }
 
     fn start_break(&mut self) {
         if let Some(break_info) = &self.curr_break {
-            println!(
+            info!(
                 "Break: {} - {} \x07",
                 break_info.title, break_info.description
             ); // \x07 will ring the terminal bell
@@ -273,7 +280,7 @@ impl Timer {
                 if sound_file.exists() {
                     play_audio_file(sound_file.to_str().unwrap());
                 } else {
-                    eprintln!("Sound file not found: {sound_file:?}");
+                    error!("Sound file not found: {sound_file:?}");
                 }
             }
         }
@@ -307,13 +314,13 @@ impl Timer {
         // First item is the next break
         if let Some((next_duration, next_break)) = breaks.first() {
             if !hide_msg {
-                println!("Next break: {} over {:?}", next_break.title, next_duration);
+                info!("Next break: {} over {:?}", next_break.title, next_duration);
             }
 
             self.time_left = self.timer + *next_duration;
             self.curr_break = Some(next_break.clone().clone());
         } else {
-            eprintln!("No breaks found. Specify at least one break in the config!");
+            error!("No breaks found. Specify at least one break in the config!");
             process::exit(1);
         }
     }
@@ -360,7 +367,7 @@ fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
         if let Err(err) = listen(move |_event| {
             *last_input.write().unwrap() = Instant::now();
         }) {
-            eprintln!("Error while tracking input: {err:?}")
+            error!("Error while tracking input: {err:?}")
         }
     });
 }
