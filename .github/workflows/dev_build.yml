@@ -46,6 +46,12 @@ jobs:
           components: rust-src
           override: true
 
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose
+
       - name: Release mode build
         uses: actions-rs/cargo@v1
         with:
@@ -81,3 +87,12 @@ jobs:
         with:
           name: ${{ env.FILE_NAME }}
           path: ${{ env.FILE_NAME }}
+  dev_release:
+    name: Development Release
+    needs: dev_build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+      - name: Display structure of downloaded files
+        run: ls -R
+
