@@ -6,7 +6,7 @@ on:
       - 'v[0-9]+.*'
 
 jobs:
-  tagged-release:
+  release_build:
     name: "Tagged Release"
     runs-on: ${{ matrix.os }}
     strategy:
@@ -40,7 +40,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           target: ${{ env.TARGET }}
-          toolchain: nightly
+          toolchain: stable
           profile: minimal
           components: rust-src
           override: true
@@ -51,17 +51,44 @@ jobs:
           command: build
           args: -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target  ${{ env.TARGET }} --release --verbose
 
-      - name: Compress binary
-        run: upx --best --lzma $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer
-        shell: bash
-
       - name: Rename binary
-        run: cp $GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer $GITHUB_WORKSPACE/blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
+        run: |
+          OS_NAME=$(echo $RUNNER_OS | tr '[:upper:]' '[:lower:]')
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            OUTPUT="$GITHUB_WORKSPACE\target\${{ env.TARGET }}\release\blink-timer.exe"
+            FILE_NAME="blink-$OS_NAME-${{ env.ARCHITECTURE }}-${{ github.ref_name }}.exe"
+            FILE_PATH="$GITHUB_WORKSPACE\\$FILE_NAME"
+          else
+            OUTPUT="$GITHUB_WORKSPACE/target/${{ env.TARGET }}/release/blink-timer"
+            FILE_NAME="blink-$OS_NAME-${{ env.ARCHITECTURE }}-${{ github.ref_name }}"
+            FILE_PATH="$GITHUB_WORKSPACE/$FILE_NAME"
+          fi 
+          echo "Output: $OUTPUT"
+          echo "File name: $FILE_NAME"
+          echo "File path: $FILE_PATH"
+          echo "FILE_NAME=$FILE_NAME" >> $GITHUB_ENV
+          echo "FILE_PATH=$FILE_PATH" >> $GITHUB_ENV
+          cp $OUTPUT $FILE_PATH
         shell: bash
+      
+      - name: Compress binary
+        run: upx --best --lzma $FILE_PATH
+        shell: bas 
 
+      - name: Uppload release artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.FILE_NAME }}
+          path: ${{ env.FILE_NAME }} 
+  release:
+    name: Release
+    needs: release_build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
       - name: Create release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          files: blink-${{ env.RUNNER_OS }}-${{ env.ARCHITECTURE }}-${{ github.ref_name }}
+          files: "*"

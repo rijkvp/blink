@@ -1,6 +1,6 @@
 use clap::Parser;
 use env_logger::Env;
-use log::{info, error};
+use log::{error, info, trace};
 use notify_rust::Notification;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
@@ -236,12 +236,12 @@ impl Timer {
             // Timer only runs if there was input in the last input_timeout
             if input_elapsed < self.cfg.input_timeout {
                 self.timer += time_elapsed;
-                info!("TIMER: {:?}", self.timer);
+                trace!("TIMER: {:?}", self.timer);
             }
 
-            // Start a break when the timer reaches the current break's interval 
+            // Start a break when the timer reaches the current break's interval
             if self.timer >= self.time_left {
-                self.start_break();
+                self.start_break(self.timer);
                 self.update_break(false);
             }
 
@@ -264,14 +264,14 @@ impl Timer {
         self.update_break(true);
     }
 
-    fn start_break(&mut self) {
+    fn start_break(&mut self, timer: Duration) {
         if let Some(break_info) = &self.curr_break {
             info!(
                 "Break: {} - {} \x07",
                 break_info.title, break_info.description
             ); // \x07 will ring the terminal bell
 
-            show_notification(break_info.clone(), self.sender.clone());
+            show_notification(break_info.clone(), timer.clone(), self.sender.clone());
 
             if let (Some(sound_folder), Some(sound_filename)) =
                 (&self.cfg.sounds_folder, &break_info.sound_file)
@@ -327,9 +327,8 @@ impl Timer {
 }
 
 /// Displays a notification with the break info
-fn show_notification(break_info: Break, callback: Sender<Break>) {
+fn show_notification(break_info: Break, timer: Duration, callback: Sender<Break>) {
     thread::spawn(move || {
-        let mut is_clicked = false;
         #[cfg(not(target_os = "linux"))]
         {
             Notification::new()
@@ -341,10 +340,17 @@ fn show_notification(break_info: Break, callback: Sender<Break>) {
         }
         #[cfg(target_os = "linux")]
         {
+            let mut is_clicked = false;
             Notification::new()
                 .appname("blink")
                 .summary(&break_info.title)
-                .body(&break_info.description)
+                .body(
+                    &(format!(
+                        "Using the computer for {} minutes, {}",
+                        timer.as_secs() / 60,
+                        &break_info.description
+                    )),
+                )
                 .action("default", "Complete")
                 .show()
                 .unwrap()
@@ -354,9 +360,9 @@ fn show_notification(break_info: Break, callback: Sender<Break>) {
                     }
                     _ => (),
                 });
-        }
-        if is_clicked {
-            callback.send(break_info).unwrap();
+            if is_clicked {
+                callback.send(break_info).unwrap();
+            }
         }
     });
 }
