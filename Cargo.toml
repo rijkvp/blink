@@ -11,9 +11,9 @@ keywords = ["break-timer", "break", "timer", "notifier"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-log = "0.4.17"
-env_logger = "0.9.0"
-rdev = "0.5.1"
+log = "0.4"
+env_logger = "0.9"
+rdev = "0.5"
 rodio = { version = "0.15", default-features = false, features = ["vorbis"] }
 notify-rust = "4.5"
 clap = { version = "3.2", features = ["derive"] }
