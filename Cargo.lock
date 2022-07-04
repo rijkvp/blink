@@ -177,6 +177,7 @@ dependencies = [
  "env_logger",
  "log",
  "notify-rust",
+ "rand",
  "rdev",
  "rodio",
  "serde",

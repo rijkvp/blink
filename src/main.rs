@@ -2,6 +2,7 @@ use clap::Parser;
 use env_logger::Env;
 use log::{error, info, trace};
 use notify_rust::Notification;
+use rand::Rng;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
 use serde::{Deserialize, Serialize};
@@ -21,15 +22,20 @@ use std::{
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct Break {
     title: String,
-    description: String,
+    descriptions: Vec<String>,
     sound_file: Option<PathBuf>,
     #[serde(with = "duration_format")]
     interval: Duration,
-    #[serde(default, with = "duration_format_option")]
+    #[serde(
+        default,
+        with = "duration_format_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     timeout: Option<Duration>,
+    #[serde(default, skip_serializing_if = "is_default")]
     weight: u8,
-    #[serde(default)]
-    reset_timer: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    decay: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +49,7 @@ struct Config {
     #[serde(with = "duration_format")]
     timeout_reset: Duration,
     sounds_folder: Option<PathBuf>,
+    time_descriptions: Vec<String>,
     #[serde(default, rename = "break")]
     breaks: Vec<Break>,
 }
@@ -68,6 +75,7 @@ mod duration_format {
         Ok(Duration::from_secs(secs))
     }
 }
+
 mod duration_format_option {
     use std::time::Duration;
 
@@ -96,42 +104,46 @@ mod duration_format_option {
     }
 }
 
+fn is_default<T: Default + PartialEq>(t: &T) -> bool {
+    t == &T::default()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             breaks: vec![
                 Break {
-                    interval: Duration::from_secs(60 * 15),
+                    interval: Duration::from_secs(60 * 20),
                     timeout: None,
-                    weight: 0,
-                    reset_timer: false,
-                    title: "Blink".to_string(),
-                    description: "Blink your eyes.".to_string(),
-                    sound_file: Some(PathBuf::from("blink.ogg")),
+                    title: String::from("Micro break"),
+                    descriptions: vec![
+                        String::from("Don't forget to blink your eyes."),
+                        String::from("Look away from the screen for a moment."),
+                        String::from("Make sure you have a good posture."),
+                    ],
+                    ..Default::default()
                 },
                 Break {
                     interval: Duration::from_secs(60 * 30),
                     timeout: None,
                     weight: 1,
-                    reset_timer: true,
-                    title: "Small break".to_string(),
-                    description: "Take a small break".to_string(),
-                    sound_file: Some(PathBuf::from("break.ogg")),
+                    decay: 1.0,
+                    title: String::from("Computer Break"),
+                    descriptions: vec![
+                        String::from("Get away from behind the screen!"),
+                        String::from("Time to relax for a moment!"),
+                    ],
+                    ..Default::default()
                 },
-                Break {
-                    interval: Duration::from_secs(5 * 60),
-                    timeout: Some(Duration::from_secs(90 * 60)),
-                    weight: 2,
-                    reset_timer: true,
-                    title: "Big break".to_string(),
-                    description: "Take a big break".to_string(),
-                    sound_file: Some(PathBuf::from("break.ogg")),
-                },
+            ],
+            time_descriptions: vec![
+                String::from("Using the computer for {} minutes."),
+                String::from("Staring at the screen for {} minutes."),
             ],
             sounds_folder: None,
             update_delay: Duration::from_secs(1),
-            input_timeout: Duration::from_secs(20),
-            input_reset: Duration::from_secs(120),
+            input_timeout: Duration::from_secs(30),
+            input_reset: Duration::from_secs(300),
             timeout_reset: Duration::from_secs(200),
         }
     }
@@ -164,7 +176,7 @@ fn main() -> Result<(), Error> {
                 ))?
                 .join("blink.toml")
         });
-
+        trace!("Config path: {:?}", config_path);
         if config_path.exists() {
             let config_str =
                 fs::read_to_string(config_path).map_err(|e| Error::FileSystem(e.to_string()))?;
@@ -178,6 +190,7 @@ fn main() -> Result<(), Error> {
             default_config
         }
     };
+    trace!("Loaded config: {:?}", config);
 
     Timer::new(config).start();
 
@@ -266,12 +279,22 @@ impl Timer {
 
     fn start_break(&mut self, timer: Duration) {
         if let Some(break_info) = &self.curr_break {
-            info!(
-                "Break: {} - {} \x07",
-                break_info.title, break_info.description
-            ); // \x07 will ring the terminal bell
+            let time_description = format_string(
+                &self.cfg.time_descriptions
+                    [rand::thread_rng().gen_range(0..self.cfg.time_descriptions.len())],
+                &(timer.as_secs() / 60).to_string(),
+            );
+            let break_description = &break_info.descriptions
+                [rand::thread_rng().gen_range(0..break_info.descriptions.len())];
+            let description = format!("{}\n{}", break_description, time_description);
+            info!("{}\n{}\x07", break_info.title, description); // \x07 will ring the terminal bell
 
-            show_notification(break_info.clone(), timer.clone(), self.sender.clone());
+            show_notification(
+                break_info.clone(),
+                break_info.title.clone(),
+                description.clone(),
+                self.sender.clone(),
+            );
 
             if let (Some(sound_folder), Some(sound_filename)) =
                 (&self.cfg.sounds_folder, &break_info.sound_file)
@@ -326,15 +349,37 @@ impl Timer {
     }
 }
 
+/// Returns a string with the '{}' replaced with the input argument
+fn format_string(source: &str, input: &str) -> String {
+    let mut result = source.to_string();
+    if let Some(index) = source.find("{}") {
+        result.replace_range(index..index + 2, input);
+    } else {
+        error!("Invalid formating string '{}'.", source)
+    }
+    result
+}
+
+#[test]
+fn format_string_test() {
+    assert_eq!(format_string("Hello {}!", "world"), "Hello world!");
+    assert_eq!(format_string("A & {}", "B"), "A & B");
+}
+
 /// Displays a notification with the break info
-fn show_notification(break_info: Break, timer: Duration, callback: Sender<Break>) {
+fn show_notification(
+    break_info: Break,
+    title: String,
+    description: String,
+    callback: Sender<Break>,
+) {
     thread::spawn(move || {
         #[cfg(not(target_os = "linux"))]
         {
             Notification::new()
                 .appname("blink")
-                .summary(&break_info.title)
-                .body(&break_info.description)
+                .summary(&title)
+                .body(&description)
                 .show()
                 .unwrap();
         }
@@ -343,14 +388,8 @@ fn show_notification(break_info: Break, timer: Duration, callback: Sender<Break>
             let mut is_clicked = false;
             Notification::new()
                 .appname("blink")
-                .summary(&break_info.title)
-                .body(
-                    &(format!(
-                        "Using the computer for {} minutes, {}",
-                        timer.as_secs() / 60,
-                        &break_info.description
-                    )),
-                )
+                .summary(&title)
+                .body(&description)
                 .action("default", "Complete")
                 .show()
                 .unwrap()
