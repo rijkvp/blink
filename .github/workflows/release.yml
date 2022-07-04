@@ -7,7 +7,7 @@ on:
 
 jobs:
   release_build:
-    name: "Tagged Release"
+    name: "Release build"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -40,7 +40,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           target: ${{ env.TARGET }}
-          toolchain: stable
+          toolchain: nightly
           profile: minimal
           components: rust-src
           override: true
@@ -73,7 +73,7 @@ jobs:
       
       - name: Compress binary
         run: upx --best --lzma $FILE_PATH
-        shell: bas 
+        shell: bash
 
       - name: Uppload release artifacts
         uses: actions/upload-artifact@v3
@@ -86,9 +86,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v3
+      - name: List files
+        run: pwd && ls -R
       - name: Create release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          files: "*"
+          files: "./*"
