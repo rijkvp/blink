@@ -100,5 +100,5 @@ jobs:
           prerelease: true
           automatic_release_tag: "latest"
           title: "Development Build"
-          files: "*"
+          files: "./**/*"
 
