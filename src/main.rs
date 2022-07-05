@@ -1,6 +1,6 @@
 use clap::Parser;
 use env_logger::Env;
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use notify_rust::Notification;
 use rand::Rng;
 use rdev::listen;
@@ -197,25 +197,48 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Default, Clone)]
+struct BreakState {
+    time_left: Duration,
+    prompts: u64,
+    b: Break,
+}
+
+impl BreakState {
+    fn new(b: Break) -> Self {
+        Self {
+            b: b,
+            ..Default::default()
+        }
+    }
+}
+
 struct Timer {
     timer: Duration,
     time_left: Duration,
     curr_break: Option<Break>,
+    state: Vec<BreakState>,
     cfg: Config,
-    sender: Sender<Break>,
-    reset_receiver: Receiver<Break>,
+    reset_tx: Sender<Break>,
+    reset_rx: Receiver<Break>,
 }
 
 impl Timer {
-    pub fn new(config: Config) -> Self {
-        let (reset_sender, receiver) = mpsc::channel();
+    pub fn new(cfg: Config) -> Self {
+        let (reset_tx, reset_rx) = mpsc::channel();
+        let state = cfg
+            .breaks
+            .iter()
+            .map(|b| BreakState::new(b.clone()))
+            .collect();
         Self {
             timer: Duration::ZERO,
             time_left: Duration::MAX,
             curr_break: None,
-            cfg: config,
-            sender: reset_sender,
-            reset_receiver: receiver,
+            state,
+            cfg,
+            reset_tx,
+            reset_rx,
         }
     }
 
@@ -259,7 +282,7 @@ impl Timer {
             }
 
             // Reset timer if break received through the channel form another thread
-            if let Ok(break_ref) = self.reset_receiver.try_recv() {
+            if let Ok(break_ref) = self.reset_rx.try_recv() {
                 // Breaks with a weight of 0 won't reset the timer
                 if break_ref.weight > 0 {
                     self.reset();
@@ -277,8 +300,8 @@ impl Timer {
         self.update_break(true);
     }
 
-    fn start_break(&mut self, timer: Duration) {
-        if let Some(break_info) = &self.curr_break {
+    fn start_break(&self, timer: Duration) {
+        if let Some(break_info) = self.curr_break.clone() {
             let time_description = format_string(
                 &self.cfg.time_descriptions
                     [rand::thread_rng().gen_range(0..self.cfg.time_descriptions.len())],
@@ -293,7 +316,7 @@ impl Timer {
                 break_info.clone(),
                 break_info.title.clone(),
                 description.clone(),
-                self.sender.clone(),
+                self.reset_tx.clone(),
             );
 
             if let (Some(sound_folder), Some(sound_filename)) =
@@ -310,14 +333,14 @@ impl Timer {
     }
 
     fn update_break(&mut self, hide_msg: bool) {
-        let mut breaks = Vec::new();
+        // let mut breaks: Vec<(Duration, BreakState)> = Vec::new();
 
         // Determine the next break
-        for break_item in self.cfg.breaks.iter() {
+        for mut item in self.state.iter_mut() {
             let mut in_timeout = false;
             let mut time_left = Duration::MAX;
             // Before timeout
-            if let Some(timeout) = break_item.timeout {
+            if let Some(timeout) = item.b.timeout {
                 if self.timer <= timeout {
                     time_left = timeout - self.timer;
                     in_timeout = true;
@@ -325,23 +348,38 @@ impl Timer {
             }
             if !in_timeout {
                 // After timeout: every constant interval
-                time_left = break_item.interval
-                    - Duration::from_secs(self.timer.as_secs() % break_item.interval.as_secs())
+                time_left = item.b.interval
+                    - Duration::from_secs(self.timer.as_secs() % item.b.interval.as_secs())
             }
-            breaks.push((time_left, break_item));
+            item.time_left = time_left;
         }
 
-        // Sort first by time left and then by type
-        breaks.sort_by(|a: &(Duration, &Break), b| a.0.cmp(&b.0).then(b.1.weight.cmp(&a.1.weight)));
+        // Sort first by duration and then by type
+        self.state.sort_by(|a, b| {
+            a.time_left
+                .cmp(&b.time_left)
+                .then(b.b.weight.cmp(&a.b.weight))
+        });
 
         // First item is the next break
-        if let Some((next_duration, next_break)) = breaks.first() {
+        if let Some(mut next) = self.state.first_mut() {
+            let next_duration = next.time_left;
+
+            // The decay function, break with a decay of 1.0 will be halved after every prompt
+            let decay_mult = (1.0 / (1.0 + next.b.decay)).powf(next.prompts as f64);
+            let time_left = Duration::from_secs_f64(next_duration.as_secs_f64() * decay_mult);
+            debug!(
+                "Decay mult: {}, time: {:?}, prompt: {}",
+                decay_mult, time_left, next.prompts
+            );
+            next.prompts += 1;
+
             if !hide_msg {
-                info!("Next break: {} over {:?}", next_break.title, next_duration);
+                info!("Next break: {} over {:?}", next.b.title, time_left);
             }
 
-            self.time_left = self.timer + *next_duration;
-            self.curr_break = Some(next_break.clone().clone());
+            self.time_left = self.timer + time_left;
+            self.curr_break = Some(next.b.clone());
         } else {
             error!("No breaks found. Specify at least one break in the config!");
             process::exit(1);
