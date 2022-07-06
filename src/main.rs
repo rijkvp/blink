@@ -1,7 +1,7 @@
 use clap::Parser;
 use env_logger::Env;
 use log::{debug, error, info, trace};
-use notify_rust::Notification;
+use notify_rust::{Notification, Urgency};
 use rand::Rng;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
@@ -48,6 +48,9 @@ struct Config {
     input_reset: Duration,
     #[serde(with = "duration_format")]
     timeout_reset: Duration,
+    #[serde(with = "duration_format")]
+    notification_timeout: Duration,
+    notification_press_reset: bool,
     sounds_folder: Option<PathBuf>,
     time_descriptions: Vec<String>,
     #[serde(default, rename = "break")]
@@ -145,6 +148,8 @@ impl Default for Config {
             input_timeout: Duration::from_secs(30),
             input_reset: Duration::from_secs(300),
             timeout_reset: Duration::from_secs(200),
+            notification_timeout: Duration::from_secs(10),
+            notification_press_reset: true,
         }
     }
 }
@@ -211,6 +216,10 @@ impl BreakState {
             ..Default::default()
         }
     }
+
+    fn reset(&mut self) {
+        self.prompts = 0;
+    }
 }
 
 struct Timer {
@@ -248,7 +257,7 @@ impl Timer {
 
         let mut last_update = SystemTime::now();
 
-        self.update_break(false);
+        self.update_break();
 
         // Main application loop
         loop {
@@ -278,13 +287,14 @@ impl Timer {
             // Start a break when the timer reaches the current break's interval
             if self.timer >= self.time_left {
                 self.start_break(self.timer);
-                self.update_break(false);
+                self.update_break();
             }
 
             // Reset timer if break received through the channel form another thread
             if let Ok(break_ref) = self.reset_rx.try_recv() {
                 // Breaks with a weight of 0 won't reset the timer
-                if break_ref.weight > 0 {
+                if break_ref.weight > 0 && self.cfg.notification_press_reset {
+                    info!("Resetting timer (notification press).");
                     self.reset();
                 }
             }
@@ -297,7 +307,10 @@ impl Timer {
     fn reset(&mut self) {
         info!("Reset timer.");
         self.timer = Duration::ZERO;
-        self.update_break(true);
+        for item in self.state.iter_mut() {
+            item.reset();
+        }
+        self.update_break();
     }
 
     fn start_break(&self, timer: Duration) {
@@ -313,9 +326,10 @@ impl Timer {
             info!("{}\n{}\x07", break_info.title, description); // \x07 will ring the terminal bell
 
             show_notification(
-                break_info.clone(),
                 break_info.title.clone(),
                 description.clone(),
+                self.cfg.notification_timeout,
+                break_info.clone(),
                 self.reset_tx.clone(),
             );
 
@@ -332,9 +346,7 @@ impl Timer {
         }
     }
 
-    fn update_break(&mut self, hide_msg: bool) {
-        // let mut breaks: Vec<(Duration, BreakState)> = Vec::new();
-
+    fn update_break(&mut self) {
         // Determine the next break
         for mut item in self.state.iter_mut() {
             let mut in_timeout = false;
@@ -374,9 +386,7 @@ impl Timer {
             );
             next.prompts += 1;
 
-            if !hide_msg {
-                info!("Next break: {} over {:?}", next.b.title, time_left);
-            }
+            info!("Next break: {} over {:?}", next.b.title, time_left);
 
             self.time_left = self.timer + time_left;
             self.curr_break = Some(next.b.clone());
@@ -406,10 +416,11 @@ fn format_string_test() {
 
 /// Displays a notification with the break info
 fn show_notification(
-    break_info: Break,
     title: String,
     description: String,
-    callback: Sender<Break>,
+    timeout: Duration,
+    _break_info: Break,
+    _reset_tx: Sender<Break>,
 ) {
     thread::spawn(move || {
         #[cfg(not(target_os = "linux"))]
@@ -418,17 +429,25 @@ fn show_notification(
                 .appname("blink")
                 .summary(&title)
                 .body(&description)
+                .timeout(timeout.as_millis() as i32)
                 .show()
                 .unwrap();
         }
         #[cfg(target_os = "linux")]
         {
+            let urgency = match _break_info.weight {
+                0 => Urgency::Low,
+                1 => Urgency::Normal,
+                2.. => Urgency::Critical,
+            };
             let mut is_clicked = false;
             Notification::new()
                 .appname("blink")
                 .summary(&title)
                 .body(&description)
                 .action("default", "Complete")
+                .urgency(urgency)
+                .timeout(timeout.as_millis() as i32)
                 .show()
                 .unwrap()
                 .wait_for_action(|action| match action {
@@ -438,7 +457,7 @@ fn show_notification(
                     _ => (),
                 });
             if is_clicked {
-                callback.send(break_info).unwrap();
+                _reset_tx.send(_break_info).unwrap();
             }
         }
     });
