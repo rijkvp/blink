@@ -1,7 +1,7 @@
 use clap::Parser;
 use env_logger::Env;
 use log::{debug, error, info, trace};
-use notify_rust::{Notification, Urgency};
+use notify_rust::Notification;
 use rand::Rng;
 use rdev::listen;
 use rodio::{source::Source, Decoder, OutputStream};
@@ -133,7 +133,7 @@ impl Default for Config {
                     decay: 1.0,
                     title: String::from("Computer Break"),
                     descriptions: vec![
-                        String::from("Get away from behind the screen!"),
+                        String::from("Get away from behind your screen!"),
                         String::from("Time to relax for a moment!"),
                     ],
                     ..Default::default()
@@ -176,9 +176,9 @@ fn main() -> Result<(), Error> {
     let config = {
         let config_path = args.config_path.unwrap_or({
             dirs::config_dir()
-                .ok_or(Error::Fatal(
-                    "No config directory found on your system.".to_string(),
-                ))?
+                .ok_or_else(|| {
+                    Error::Fatal("No config directory found on your system.".to_string())
+                })?
                 .join("blink.toml")
         });
         trace!("Config path: {:?}", config_path);
@@ -212,7 +212,7 @@ struct BreakState {
 impl BreakState {
     fn new(b: Break) -> Self {
         Self {
-            b: b,
+            b,
             ..Default::default()
         }
     }
@@ -327,7 +327,7 @@ impl Timer {
 
             show_notification(
                 break_info.title.clone(),
-                description.clone(),
+                description,
                 self.cfg.notification_timeout,
                 break_info.clone(),
                 self.reset_tx.clone(),
@@ -436,9 +436,9 @@ fn show_notification(
         #[cfg(target_os = "linux")]
         {
             let urgency = match _break_info.weight {
-                0 => Urgency::Low,
-                1 => Urgency::Normal,
-                2.. => Urgency::Critical,
+                0 => notify_rust::Urgency::Low,
+                1 => notify_rust::Urgency::Normal,
+                2.. => notify_rust::Urgency::Critical,
             };
             let mut is_clicked = false;
             Notification::new()
@@ -450,11 +450,10 @@ fn show_notification(
                 .timeout(timeout.as_millis() as i32)
                 .show()
                 .unwrap()
-                .wait_for_action(|action| match action {
-                    "default" => {
+                .wait_for_action(|action| {
+                    if action == "default" {
                         is_clicked = true;
                     }
-                    _ => (),
                 });
             if is_clicked {
                 _reset_tx.send(_break_info).unwrap();
@@ -476,7 +475,7 @@ fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
 
 /// Loads and plays an audio file in a new thread
 fn play_audio_file(sound_path: &str) {
-    let path_clone = sound_path.to_owned().clone();
+    let path_clone = sound_path.to_owned();
     thread::spawn(move || {
         let (_stream, stream_handle) = OutputStream::try_default().unwrap();
         let break_sound =
