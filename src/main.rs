@@ -24,6 +24,12 @@ struct Break {
     title: String,
     descriptions: Vec<String>,
     sound_file: Option<PathBuf>,
+    #[serde(
+        default,
+        with = "duration_format_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    sound_duration: Option<Duration>,
     #[serde(with = "duration_format")]
     interval: Duration,
     #[serde(
@@ -51,7 +57,7 @@ struct Config {
     #[serde(with = "duration_format")]
     notification_timeout: Duration,
     notification_press_reset: bool,
-    sounds_folder: Option<PathBuf>,
+    sounds_dir: Option<PathBuf>,
     time_descriptions: Vec<String>,
     #[serde(default, rename = "break")]
     breaks: Vec<Break>,
@@ -129,9 +135,9 @@ impl Default for Config {
                 Break {
                     interval: Duration::from_secs(60 * 30),
                     timeout: None,
-                    weight: 1,
+                    weight: 2,
                     decay: 1.0,
-                    title: String::from("Computer Break"),
+                    title: String::from("Computer break"),
                     descriptions: vec![
                         String::from("Get away from behind your screen!"),
                         String::from("Time to relax for a moment!"),
@@ -143,7 +149,7 @@ impl Default for Config {
                 String::from("Using the computer for {} minutes."),
                 String::from("Staring at the screen for {} minutes."),
             ],
-            sounds_folder: None,
+            sounds_dir: None,
             update_delay: Duration::from_secs(1),
             input_timeout: Duration::from_secs(30),
             input_reset: Duration::from_secs(300),
@@ -181,7 +187,7 @@ fn main() -> Result<(), Error> {
                 })?
                 .join("blink.toml")
         });
-        trace!("Config path: {:?}", config_path);
+        debug!("Config path: {:?}", config_path);
         if config_path.exists() {
             let config_str =
                 fs::read_to_string(config_path).map_err(|e| Error::FileSystem(e.to_string()))?;
@@ -334,11 +340,14 @@ impl Timer {
             );
 
             if let (Some(sound_folder), Some(sound_filename)) =
-                (&self.cfg.sounds_folder, &break_info.sound_file)
+                (&self.cfg.sounds_dir, &break_info.sound_file)
             {
                 let sound_file = PathBuf::from(&sound_folder).join(sound_filename);
                 if sound_file.exists() {
-                    play_audio_file(sound_file.to_str().unwrap());
+                    play_audio_file(
+                        sound_file.to_str().unwrap(),
+                        break_info.sound_duration.unwrap_or(Duration::from_secs(30)),
+                    );
                 } else {
                     error!("Sound file not found: {sound_file:?}");
                 }
@@ -474,7 +483,7 @@ fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
 }
 
 /// Loads and plays an audio file in a new thread
-fn play_audio_file(sound_path: &str) {
+fn play_audio_file(sound_path: &str, duration: Duration) {
     let path_clone = sound_path.to_owned();
     thread::spawn(move || {
         let (_stream, stream_handle) = OutputStream::try_default().unwrap();
@@ -484,6 +493,7 @@ fn play_audio_file(sound_path: &str) {
         stream_handle
             .play_raw(audio_source.convert_samples())
             .expect("Failed to play audio");
-        thread::sleep(Duration::from_secs(20)); // Wait some time to make sure the sound finished playing
+        // Wait for the sound to finish playing
+        thread::sleep(duration);
     });
 }
