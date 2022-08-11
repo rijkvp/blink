@@ -45,16 +45,24 @@ time_descriptions = ["Using the computer for {} minutes.", "Staring at the scree
 # The path of the directory the sounds are loaded from. You can specify a different sound for earch break type.
 sounds_dir = "/path/to/my/sounds"
 
-# You can specify multiple break types. Break types with a higher weight will be selected
-
+# You can specify multiple break types / timers.
 [[break]]
+# Required: title of the break, will be shown on notifications.
 title = "Micro break"
-descriptions = ["Don't forget to blink your eyes.", "Look away from the screen for a moment.", "Make sure you have a good posture."]
-# The interval between each break.
+# Required: the interval between each break.
 interval = "1200"
+# A list of random descriptions. A random one will be shown in notifications
+descriptions = ["Don't forget to blink your eyes.", "Look away from the screen for a moment.", "Make sure you have a good posture."]
 
 [[break]]
 title = "Computer break"
+interval = "1800"
+# How long it takes for the break to become 'active'.
+timeout = "2000"
+# Breaks with a higher weight will be chosen before others.
+weight = 2
+# The decay of the break interval after each prompt. A decay of 1.0 will multiply the interval with 0.5 after each prompt.
+decay = 0.5
 descriptions = ["Get away from behind your screen!", "Time to relax for a moment!"]
 # The sound to play on each prompt. Refering to a file in the sounds_dir.
 # Note that only the .ogg (vorbis) codec is supported!
@@ -62,11 +70,6 @@ descriptions = ["Get away from behind your screen!", "Time to relax for a moment
 sound_file = "time-for-a-break.ogg"
 # How long the sound should be played.
 sound_duration = "10"
-interval = "1800"
-# How long it takes for the break to become 'active'.
-timeout = "2000"
-# Breaks with a higher weight will be chosen before .
-weight = 2
-# The decay of the break interval after each prompt. A decay of 1.0 will multiply the interval with 0.5 after each prompt.
-decay = 0.5
+# A command that gets run on the break
+command = 'mpv "https://www.youtube.com/watch?v=dQw4w9WgXcQ"'
 ```

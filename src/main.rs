@@ -10,7 +10,7 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::PathBuf,
-    process,
+    process::{self, Command, Stdio},
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc, RwLock,
@@ -22,14 +22,6 @@ use std::{
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct Break {
     title: String,
-    descriptions: Vec<String>,
-    sound_file: Option<PathBuf>,
-    #[serde(
-        default,
-        with = "duration_format_option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    sound_duration: Option<Duration>,
     #[serde(with = "duration_format")]
     interval: Duration,
     #[serde(
@@ -42,6 +34,15 @@ struct Break {
     weight: u8,
     #[serde(default, skip_serializing_if = "is_default")]
     decay: f64,
+    descriptions: Vec<String>,
+    sound_file: Option<PathBuf>,
+    #[serde(
+        default,
+        with = "duration_format_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    sound_duration: Option<Duration>,
+    command: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,6 +339,9 @@ impl Timer {
                 break_info.clone(),
                 self.reset_tx.clone(),
             );
+            if let Some(cmd) = break_info.command {
+                execute_command(cmd);
+            }
 
             if let (Some(sound_folder), Some(sound_filename)) =
                 (&self.cfg.sounds_dir, &break_info.sound_file)
@@ -478,6 +482,37 @@ fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
             *last_input.write().unwrap() = Instant::now();
         }) {
             error!("Error while tracking input: {err:?}")
+        }
+    });
+}
+
+/// Runs a command in a new thread, output is logged when unsuccesful
+fn execute_command(command: String) {
+    thread::spawn(move || {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(&command)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to execute process")
+            .wait_with_output()
+            .expect("failed to wait");
+        if !output.status.success() {
+            error!("command '{}' failed ({})", &command, output.status);
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stdout = stdout.trim();
+            if stdout.len() > 0 {
+                error!("stdout: {}", stdout);
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stderr = stderr.trim();
+            if stderr.len() > 0 {
+                error!("stderr: {}", stderr);
+            }
+        } else {
+            info!("command '{}' finished succesfully", &command);
         }
     });
 }
