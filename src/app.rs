@@ -1,6 +1,6 @@
 use crate::{
     config::{Config, Timer},
-    util,
+    util, lock_screen,
 };
 use log::{debug, error, info, trace};
 use rand::{thread_rng, Rng};
@@ -135,12 +135,16 @@ impl App {
                 );
             }
 
+            if let Some(sound) = timer.sound {
+                util::play_sound(sound);
+            }
+
             if let Some(cmd) = timer.command {
                 util::execute_command(cmd);
             }
 
-            if let Some(sound) = timer.sound {
-                util::play_sound(sound);
+            if let Some(lock_conf) = timer.lock_screen {
+                lock_screen::start(lock_conf);
             }
         }
     }
@@ -177,11 +181,11 @@ impl App {
             let next_duration = next.time_left;
 
             // The decline function, the iterval will be multiplied by 0.5 with a decline of 1.0
-            let decay_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
-            let time_left = Duration::from_secs_f64(next_duration.as_secs_f64() * decay_mult);
+            let decline_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
+            let time_left = Duration::from_secs_f64(next_duration.as_secs_f64() * decline_mult);
             debug!(
-                "Decay mult: {}, time: {:?}, prompt: {}",
-                decay_mult, time_left, next.prompts
+                "Decline mult: {}, time: {:?}, prompt: {}",
+                decline_mult, time_left, next.prompts
             );
             next.prompts += 1;
 

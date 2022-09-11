@@ -21,6 +21,7 @@ rdev = "0.5"
 notify-rust = "4.5"
 rodio = { version = "0.15", default-features = false, features = ["vorbis"] }
 rand = "0.8"
+xcb = "1.1"
 
 [profile.release]
 lto = true

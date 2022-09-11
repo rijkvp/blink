@@ -3,6 +3,15 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, time::Duration};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct LockScreen {
+    #[serde(with = "duration_format")]
+    pub timeout: Duration,
+    #[serde(with = "duration_format")]
+    pub duration: Duration,
+    pub escape: bool,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Notification {
     pub title: String,
     pub descriptions: Vec<String>,
@@ -45,6 +54,8 @@ pub struct Timer {
     pub sound: Option<Sound>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lock_screen: Option<LockScreen>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

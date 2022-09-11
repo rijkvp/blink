@@ -182,6 +182,7 @@ dependencies = [
  "rodio",
  "serde",
  "serde_yaml",
+ "xcb",
 ]
 
 [[package]]
@@ -1245,6 +1246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8533f14c8382aaad0d592c812ac3b826162128b65662331e1127b45c3d18536b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1896,6 +1906,17 @@ checksum = "f7ae97874a928d821b061fce3d1fc52f08071dd53c89a6102bc06efcac3b2908"
 dependencies = [
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "xcb"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b127bf5bfe9dbb39118d6567e3773d4bbc795411a8e1ef7b7e056bccac0011a9"
+dependencies = [
+ "bitflags",
+ "libc",
+ "quick-xml",
 ]
 
 [[package]]

@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod error;
+mod lock_screen;
 mod util;
 
 use crate::app::App;
