@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod error;
+#[cfg(target_os = "linux")]
 mod lock_screen;
 mod util;
 

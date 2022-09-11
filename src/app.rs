@@ -1,6 +1,6 @@
 use crate::{
     config::{Config, Timer},
-    util, lock_screen,
+    util, 
 };
 use log::{debug, error, info, trace};
 use rand::{thread_rng, Rng};
@@ -143,8 +143,9 @@ impl App {
                 util::execute_command(cmd);
             }
 
+            #[cfg(target_os = "linux")]
             if let Some(lock_conf) = timer.lock_screen {
-                lock_screen::start(lock_conf);
+                crate::lock_screen::start(lock_conf);
             }
         }
     }

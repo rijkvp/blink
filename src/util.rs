@@ -34,16 +34,30 @@ pub fn show_notification(title: String, description: String, timeout: Duration, 
             1 => notify_rust::Urgency::Normal,
             2.. => notify_rust::Urgency::Critical,
         };
-        if let Err(e) = Notification::new()
-            .appname("blink")
-            .summary(&title)
-            .body(&description)
-            .action("default", "Complete")
-            .urgency(urgency)
-            .timeout(timeout.as_millis() as i32)
-            .show()
+        #[cfg(target_os = "linux")]
         {
-            error!("Failed to show notification: {e}");
+            if let Err(e) = Notification::new()
+                .appname("blink")
+                .summary(&title)
+                .body(&description)
+                .urgency(urgency)
+                .timeout(timeout.as_millis() as i32)
+                .show()
+            {
+                error!("Failed to show notification: {e}");
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            if let Err(e) = Notification::new()
+                .appname("blink")
+                .summary(&title)
+                .body(&description)
+                .timeout(timeout.as_millis() as i32)
+                .show()
+            {
+                error!("Failed to show notification: {e}");
+            }
         }
     });
 }
