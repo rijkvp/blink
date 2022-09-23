@@ -1,7 +1,7 @@
 use log::{debug, error};
 use std::{
     thread,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 use xcb::x;
 
@@ -19,7 +19,7 @@ pub fn start(config: LockScreen) {
 }
 
 fn open(duration: Duration, allow_quitting: bool) -> xcb::Result<()> {
-    let start = SystemTime::now();
+    let start = Instant::now();
 
     let (conn, screen_num) = xcb::Connection::connect(None).unwrap();
     let setup = conn.get_setup();
@@ -76,7 +76,7 @@ fn open(duration: Duration, allow_quitting: bool) -> xcb::Result<()> {
                 break;
             }
         }
-        if start.elapsed().unwrap() > duration {
+        if start.elapsed() > duration {
             break;
         }
         thread::sleep(Duration::from_millis(50));

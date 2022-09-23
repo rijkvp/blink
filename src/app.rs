@@ -1,13 +1,13 @@
 use crate::{
     config::{Config, Timer},
-    util, 
+    util,
 };
 use log::{debug, error, info, trace};
 use rand::{thread_rng, Rng};
 use std::{
     sync::{Arc, RwLock},
     thread,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 #[derive(Default, Clone)]
@@ -61,12 +61,20 @@ impl App {
         }
 
         self.update_timer();
-        let mut last_update = SystemTime::now();
+        let mut last_update = Instant::now();
 
         let mut paused = false;
         let mut reset = false;
+
+        util::show_notification(
+            "Blink".to_string(),
+            "Blink is running.".to_string(),
+            Duration::from_secs(10),
+            0,
+        );
+
         loop {
-            let delta = last_update.elapsed().unwrap();
+            let delta = last_update.elapsed();
 
             if delta >= self.config.timeout_reset {
                 info!("Resetting timer (timeout)");
@@ -98,7 +106,7 @@ impl App {
                 self.update_timer();
             }
 
-            last_update = SystemTime::now();
+            last_update = Instant::now();
             thread::sleep(Duration::from_millis(500));
         }
     }
