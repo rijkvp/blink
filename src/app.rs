@@ -69,7 +69,7 @@ impl App {
         util::show_notification(
             "Blink".to_string(),
             "Blink is running.".to_string(),
-            Duration::from_secs(10),
+            Duration::from_secs(5),
             0,
         );
 
@@ -77,23 +77,24 @@ impl App {
             let delta = last_update.elapsed();
 
             if delta >= self.config.timeout_reset {
-                info!("Resetting timer (timeout)");
+                info!("Resetting timer (timeout of {delta:?})");
                 reset = true;
             }
 
             if let Some(input_tracking) = &self.config.input_tracking {
                 let input_elapsed = last_input.read().unwrap().elapsed();
                 if input_elapsed >= input_tracking.inactivity_reset {
-                    info!("Resetting timer (input inactivity)");
+                    info!("Resetting timer (input timeout {input_elapsed:?})");
                     reset = true;
                 }
 
                 // Pause after input activity
                 paused = input_elapsed > input_tracking.inactivity_pause;
             }
+
             if reset {
                 self.reset();
-                continue;
+                reset = false;
             }
 
             if !paused {
@@ -112,7 +113,7 @@ impl App {
     }
 
     fn reset(&mut self) {
-        info!("Reset timer.");
+        trace!("Resetting timers.");
         self.elapsed = Duration::ZERO;
         for item in self.timers.iter_mut() {
             item.reset();
