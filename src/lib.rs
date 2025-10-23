@@ -1,0 +1,106 @@
+pub mod async_socket;
+pub mod config;
+pub mod util;
+
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt::{self, Display},
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
+
+pub const APP_NAME: &str = "blink";
+pub const ACTIVED_NAME: &str = "actived";
+
+pub fn socket_path() -> PathBuf {
+    dirs::runtime_dir()
+        .expect("No runtime directory found!")
+        .join(APP_NAME)
+        .join(APP_NAME)
+        .with_extension("sock")
+}
+
+pub fn actived_socket_path() -> PathBuf {
+    PathBuf::from("/run")
+        .join(APP_NAME)
+        .join(ACTIVED_NAME)
+        .with_extension("sock")
+}
+
+pub fn get_unix_time() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActivityMessage {
+    pub last_active: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum IpcRequest {
+    Status,
+    Toggle,
+    Reset,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum IpcResponse {
+    Ok,
+    Status(Status),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Status {
+    duration: Duration,
+}
+
+impl Status {
+    pub fn new(duration: Duration) -> Self {
+        Self { duration }
+    }
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        format_duration(f, self.duration)?;
+        Ok(())
+    }
+}
+
+pub trait DurationExt {
+    fn display(&self) -> DurationDisplay;
+}
+
+impl DurationExt for Duration {
+    fn display(&self) -> DurationDisplay {
+        DurationDisplay(*self)
+    }
+}
+
+pub struct DurationDisplay(Duration);
+
+impl Display for DurationDisplay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        format_duration(f, self.0)
+    }
+}
+
+fn format_duration(f: &mut fmt::Formatter, duration: Duration) -> fmt::Result {
+    let mut secs = duration.as_secs();
+    let days = secs / 86_400;
+    secs %= 86_400;
+    let hours = secs / 3_600;
+    secs %= 3_600;
+    let minutes = secs / 60;
+    secs %= 60;
+    if days > 0 {
+        write!(f, "{}d ", days)?;
+    }
+    if hours > 0 {
+        write!(f, "{:02}:", hours)?;
+    }
+    write!(f, "{:02}:{:02}", minutes, secs)
+}

@@ -1,14 +1,31 @@
-use crate::error::Error;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, time::Duration};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct LockScreen {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub timers: Vec<Timer>,
+    pub input_tracking: Option<InputTracking>,
     #[serde(with = "duration_format")]
-    pub timeout: Duration,
-    #[serde(with = "duration_format")]
-    pub duration: Duration,
-    pub escape: bool,
+    pub timeout_reset: Duration,
+}
+
+impl Config {
+    pub fn load_or_create(path: PathBuf) -> Result<Self> {
+        if path.exists() {
+            let config_str = fs::read_to_string(&path).context("failed to read config file")?;
+            serde_yaml::from_str::<Self>(&config_str).context("failed to parse config file")
+        } else {
+            let default_config = Config::default();
+            let config_str = serde_yaml::to_string(&default_config).unwrap();
+            if let Some(dir) = path.parent() {
+                fs::create_dir_all(dir).context("failed to create config directory")?;
+            }
+            fs::write(&path, &config_str).context("failed to write config file")?;
+            println!("Created config file at '{}'", path.display());
+            Ok(default_config)
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -54,38 +71,6 @@ pub struct Timer {
     pub sound: Option<Sound>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lock_screen: Option<LockScreen>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    pub timers: Vec<Timer>,
-    pub input_tracking: Option<InputTracking>,
-    #[serde(with = "duration_format")]
-    pub timeout_reset: Duration,
-}
-
-impl Config {
-    pub fn load_or_create(path: PathBuf) -> Result<Self, Error> {
-        if path.exists() {
-            let config_str = fs::read_to_string(path)
-                .map_err(|e| Error::IO(format!("failed to read config file: {e}")))?;
-            Ok(serde_yaml::from_str::<Self>(&config_str)
-                .map_err(|e| Error::Config(e.to_string()))?)
-        } else {
-            let default_config = Config::default();
-            let config_str = serde_yaml::to_string(&default_config).unwrap();
-            if let Some(dir) = path.parent() {
-                fs::create_dir_all(dir)
-                    .map_err(|e| Error::IO(format!("failed to create config directory: {e}")))?;
-            }
-            fs::write(&path, &config_str)
-                .map_err(|e| Error::IO(format!("failed to write config file: {e}")))?;
-            println!("Created config file at '{}'", path.display());
-            Ok(default_config)
-        }
-    }
 }
 
 fn is_default<T: Default + PartialEq>(t: &T) -> bool {
@@ -133,7 +118,7 @@ impl Default for Config {
 }
 
 mod duration_format {
-    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -167,7 +152,7 @@ mod duration_format {
 
 mod duration_format_option {
     use super::duration_format;
-    use serde::{de::Error, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>

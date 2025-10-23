@@ -1,14 +1,11 @@
 use crate::config::Sound;
-use log::{error, info};
 use notify_rust::Notification;
-use rodio::{Decoder, OutputStream, Source};
 use std::{
     fs::File,
     io::BufReader,
     process::{Command, Stdio},
-    sync::{Arc, RwLock},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// Returns a string with the '{}' replaced with the input argument
@@ -34,47 +31,21 @@ pub fn show_notification(title: String, description: String, timeout: Duration, 
             1 => notify_rust::Urgency::Normal,
             2.. => notify_rust::Urgency::Critical,
         };
-        #[cfg(target_os = "linux")]
+        if let Err(e) = Notification::new()
+            .appname("blink")
+            .summary(&title)
+            .body(&description)
+            .urgency(urgency)
+            .timeout(timeout.as_millis() as i32)
+            .show()
         {
-            if let Err(e) = Notification::new()
-                .appname("blink")
-                .summary(&title)
-                .body(&description)
-                .urgency(urgency)
-                .timeout(timeout.as_millis() as i32)
-                .show()
-            {
-                error!("Failed to show notification: {e}");
-            }
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            if let Err(e) = Notification::new()
-                .appname("blink")
-                .summary(&title)
-                .body(&description)
-                .timeout(timeout.as_millis() as i32)
-                .show()
-            {
-                error!("Failed to show notification: {e}");
-            }
-        }
-    });
-}
-
-/// Starts a thread to keep track of the last input activities
-pub fn start_input_tracking(last_input: Arc<RwLock<Instant>>) {
-    thread::spawn(move || {
-        if let Err(err) = rdev::listen(move |_event| {
-            *last_input.write().unwrap() = Instant::now();
-        }) {
-            error!("Error while tracking input: {err:?}")
+            log::error!("Failed to show notification: {e}");
         }
     });
 }
 
 /// Runs a command in a new thread, output is logged when unsuccesful
-pub fn execute_command(command: String) {
+pub fn exec_command(command: String) {
     thread::spawn(move || {
         let output = Command::new("sh")
             .arg("-c")
@@ -87,19 +58,19 @@ pub fn execute_command(command: String) {
             .wait_with_output()
             .expect("failed to wait");
         if !output.status.success() {
-            error!("command '{}' failed ({})", &command, output.status);
+            log::error!("Command '{}' failed ({})", &command, output.status);
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stdout = stdout.trim();
-            if stdout.len() > 0 {
-                error!("stdout: {}", stdout);
+            if !stdout.is_empty() {
+                log::error!("stdout: {}", stdout);
             }
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             let stderr = stderr.trim();
-            if stderr.len() > 0 {
-                error!("stderr: {}", stderr);
+            if !stderr.is_empty() {
+                log::error!("stderr: {}", stderr);
             }
         } else {
-            info!("command '{}' finished succesfully", &command);
+            log::info!("Command '{}' finished succesfully", &command);
         }
     });
 }
@@ -107,13 +78,10 @@ pub fn execute_command(command: String) {
 /// Loads and plays an audio file in a new thread
 pub fn play_sound(sound: Sound) {
     thread::spawn(move || {
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-        let break_sound =
-            BufReader::new(File::open(&sound.path).expect("Failed to load break audio."));
-        let audio_source = Decoder::new(break_sound).unwrap();
-        stream_handle
-            .play_raw(audio_source.convert_samples())
-            .expect("Failed to play audio");
-        thread::sleep(sound.duration);
+        let stream_handle = rodio::OutputStreamBuilder::open_default_stream()
+            .expect("failed open default audio stream");
+        let file = BufReader::new(File::open(&sound.path).expect("failed to open audio file"));
+        let sink = rodio::play(stream_handle.mixer(), file).expect("failed to play audio");
+        sink.sleep_until_end();
     });
 }
