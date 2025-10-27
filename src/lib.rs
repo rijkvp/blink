@@ -89,7 +89,7 @@ impl Display for DurationDisplay {
 }
 
 fn format_duration(f: &mut fmt::Formatter, duration: Duration) -> fmt::Result {
-    let mut secs = duration.as_secs();
+    let mut secs = duration.as_secs_f64().round() as u64;
     let days = secs / 86_400;
     secs %= 86_400;
     let hours = secs / 3_600;
