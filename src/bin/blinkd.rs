@@ -13,6 +13,8 @@ use std::{
 };
 use tokio::signal::unix::{SignalKind, signal};
 
+const TICK_INTERVAL: Duration = Duration::from_secs(1);
+
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -117,7 +119,7 @@ impl Daemon {
         tokio::spawn({
             let daemon = daemon.clone();
             async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(1));
+                let mut interval = tokio::time::interval(TICK_INTERVAL);
                 interval.tick().await; // First tick completes immediately
                 loop {
                     interval.tick().await;
@@ -143,21 +145,23 @@ impl Daemon {
                         let daemon = daemon.clone();
                         async move {
                             if let Err(e) = Self::handle_client(client_stream, daemon).await {
-                                log::error!("failed to handle client: {e:?}");
+                                log::error!("Failed to handle client: {e:?}");
                             }
                         }
                     });
                 }
                 activity_msg = async {
-                    match &mut activity_stream {
-                        Some(stream) => stream.recv::<ActivityMessage>().await.ok(),
-                        None => std::future::pending().await,
+                    if let Some(stream) = &mut activity_stream {
+                        stream.recv::<ActivityMessage>().await
+                    } else {
+                        std::future::pending().await
                     }
-                } => {
-                    if let Some(activity) = activity_msg {
+                } => match activity_msg {
+                    Ok(activity) => {
                         let mut daemon = daemon.lock().unwrap();
                         daemon.last_input = activity.last_input;
                     }
+                    Err(e) => log::error!("Failed to receive activity message: {e:?}")
                 }
             }
         }
@@ -237,9 +241,9 @@ impl Daemon {
                 .then(b.timer.weight.cmp(&a.timer.weight))
         });
 
-        // The first itmer is the next one
+        // The first timer is the next one
         if let Some(next) = self.timers.first_mut() {
-            // The decline function, the iterval will be multiplied by 0.5 with a decline of 1.0
+            // The decline function, the interval will be multiplied by 0.5 with a decline of 1.0
             let decline_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
             let time_left = Duration::from_secs_f64(next.time_left.as_secs_f64() * decline_mult);
             log::debug!(
@@ -250,7 +254,7 @@ impl Daemon {
             );
             next.prompts += 1;
 
-            println!("Next break over {}", time_left.display());
+            log::info!("Next break over {}", time_left.display());
 
             self.next_timer_at = self.elapsed + time_left;
             self.next_timer = Some(next.timer.clone());
@@ -261,11 +265,11 @@ impl Daemon {
 
     fn notify(&self) {
         if let Some(timer) = self.next_timer.clone() {
-            println!("Time to take a break!\x07"); // \x07 will ring the terminal bell
+            log::info!("Time to take a break!\x07");
 
             if let Some(notification) = timer.notification {
                 let description = {
-                    if notification.descriptions.len() > 0 {
+                    if !notification.descriptions.is_empty() {
                         let rand_index = rand::random_range(0..notification.descriptions.len());
                         &notification.descriptions[rand_index]
                     } else {
@@ -273,7 +277,7 @@ impl Daemon {
                     }
                 };
                 let description =
-                    util::format_string(&description, &self.elapsed.display().to_string());
+                    util::format_string(description, &self.elapsed.display().to_string());
                 util::show_notification(
                     notification.title,
                     description,

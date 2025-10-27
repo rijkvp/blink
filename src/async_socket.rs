@@ -56,6 +56,18 @@ impl SocketServer {
     }
 }
 
+impl Drop for SocketServer {
+    fn drop(&mut self) {
+        if self.path.exists() {
+            if let Err(e) = fs::remove_file(&self.path) {
+                log::warn!("Failed to remove socket at '{}': {}", self.path.display(), e);
+            } else {
+                log::info!("Removed socket at '{}'", self.path.display());
+            }
+        }
+    }
+}
+
 pub struct SocketStream {
     stream: UnixStream,
 }
