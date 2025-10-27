@@ -96,8 +96,11 @@ impl Daemon {
         let mut listener = SocketServer::create(blink_timer::socket_path(), true)
             .await
             .context("failed to create socket server")?;
-        // TODO: Make optional
-        let mut activity_stream = SocketStream::connect(blink_timer::actived_socket_path()).await?;
+        let mut activity_stream = if self.config.input_tracking.is_some() {
+            Some(SocketStream::connect(blink_timer::actived_socket_path()).await?)
+        } else {
+            None
+        };
 
         util::show_notification(
             "Blink".to_string(),
@@ -145,9 +148,16 @@ impl Daemon {
                         }
                     });
                 }
-                Ok(activity) = activity_stream.recv::<ActivityMessage>() => {
-                    let mut daemon = daemon.lock().unwrap();
-                    daemon.last_active = activity.last_active;
+                activity_msg = async {
+                    match &mut activity_stream {
+                        Some(stream) => stream.recv::<ActivityMessage>().await.ok(),
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    if let Some(activity) = activity_msg {
+                        let mut daemon = daemon.lock().unwrap();
+                        daemon.last_active = activity.last_active;
+                    }
                 }
             }
         }
@@ -188,8 +198,7 @@ impl Daemon {
         if !frozen && self.enabled {
             self.elapsed += delta;
             log::trace!(
-                "Tick {} {}/{}",
-                do_reset,
+                "Tick {}/{}",
                 self.elapsed.display(),
                 self.time_left.display()
             );
