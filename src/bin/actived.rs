@@ -71,7 +71,7 @@ async fn handle_client(
     let timestamp = last_input.load(Ordering::Relaxed);
     stream
         .send(&ActivityMessage {
-            last_active: timestamp,
+            last_input: timestamp,
         })
         .await?;
 
@@ -79,7 +79,7 @@ async fn handle_client(
     while let Ok(timestamp) = broadcast_rx.recv().await {
         stream
             .send(&ActivityMessage {
-                last_active: timestamp,
+                last_input: timestamp,
             })
             .await?;
     }

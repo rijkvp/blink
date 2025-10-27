@@ -1,8 +1,8 @@
-use crate::config::Sound;
 use notify_rust::Notification;
 use std::{
     fs::File,
     io::BufReader,
+    path::PathBuf,
     process::{Command, Stdio},
     thread,
     time::Duration,
@@ -76,12 +76,24 @@ pub fn exec_command(command: String) {
 }
 
 /// Loads and plays an audio file in a new thread
-pub fn play_sound(sound: Sound) {
+pub fn play_sound(path: PathBuf) {
     thread::spawn(move || {
-        let stream_handle = rodio::OutputStreamBuilder::open_default_stream()
-            .expect("failed open default audio stream");
-        let file = BufReader::new(File::open(&sound.path).expect("failed to open audio file"));
-        let sink = rodio::play(stream_handle.mixer(), file).expect("failed to play audio");
+        let Ok(mut stream_handle) = rodio::OutputStreamBuilder::open_default_stream() else {
+            log::error!("Failed to open default audio stream");
+            return;
+        };
+        stream_handle.log_on_drop(false);
+
+        let Ok(file) = File::open(&path) else {
+            log::error!("Failed to open audio file '{}'", path.display());
+            return;
+        };
+        let file = BufReader::new(file);
+
+        let Ok(sink) = rodio::play(stream_handle.mixer(), file) else {
+            log::error!("Failed to play audio");
+            return;
+        };
         sink.sleep_until_end();
     });
 }

@@ -36,7 +36,7 @@ pub fn get_unix_time() -> u64 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivityMessage {
-    pub last_active: u64,
+    pub last_input: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

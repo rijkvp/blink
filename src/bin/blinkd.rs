@@ -65,12 +65,12 @@ impl TimerState {
 struct Daemon {
     config: Config,
     elapsed: Duration,
-    time_left: Duration,
     last_update: Instant,
+    next_timer_at: Duration,
     next_timer: Option<Timer>,
     timers: Vec<TimerState>,
-    enabled: bool,
-    last_active: u64,
+    is_enabled: bool,
+    last_input: u64,
 }
 
 impl Daemon {
@@ -83,12 +83,12 @@ impl Daemon {
         Self {
             config,
             elapsed: Duration::ZERO,
-            time_left: Duration::MAX,
             last_update: Instant::now(),
+            next_timer_at: Duration::MAX,
             next_timer: None,
             timers: state,
-            enabled: true,
-            last_active: get_unix_time(),
+            is_enabled: true,
+            last_input: get_unix_time(),
         }
     }
 
@@ -156,7 +156,7 @@ impl Daemon {
                 } => {
                     if let Some(activity) = activity_msg {
                         let mut daemon = daemon.lock().unwrap();
-                        daemon.last_active = activity.last_active;
+                        daemon.last_input = activity.last_input;
                     }
                 }
             }
@@ -166,51 +166,48 @@ impl Daemon {
 
     fn tick(&mut self) {
         let mut do_reset = false;
-        let mut frozen = false;
+        let mut is_frozen = false;
 
         let delta = self.last_update.elapsed();
         self.last_update = Instant::now();
 
-        if delta >= self.config.timeout_reset {
-            log::info!("Resetting timer (timeout of {})", delta.display());
+        if Some(delta) >= self.config.timeout_reset {
+            log::info!("Resetting timer (delta of {})", delta.display());
             do_reset = true;
-        }
-
-        if self.elapsed >= self.config.timeout_reset {
+        } else if Some(self.elapsed) >= self.config.timeout_reset {
             log::info!("Resetting timer (timeout of {})", self.elapsed.display());
             do_reset = true;
         }
 
         if let Some(input_tracking) = &self.config.input_tracking {
             let activity_elapsed =
-                Duration::from_secs(blink_timer::get_unix_time() - self.last_active);
+                Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
             if activity_elapsed >= input_tracking.inactivity_reset {
                 log::info!("Resetting timer (input timeout {activity_elapsed:?})");
                 do_reset = true;
             }
-            // TODO: Pause after input activity
-            frozen = activity_elapsed > input_tracking.inactivity_pause;
+            is_frozen = activity_elapsed > input_tracking.inactivity_pause;
         };
 
         if do_reset {
             self.reset();
         }
-        if !frozen && self.enabled {
+        if !is_frozen && self.is_enabled {
             self.elapsed += delta;
             log::trace!(
                 "Tick {}/{}",
                 self.elapsed.display(),
-                self.time_left.display()
+                self.next_timer_at.display()
             );
         }
-        if self.elapsed >= self.time_left {
+        if self.elapsed >= self.next_timer_at {
             self.notify();
             self.update_timer();
         }
     }
 
     fn reset(&mut self) {
-        log::trace!("Resetting timers.");
+        log::trace!("Resetting timers");
         self.elapsed = Duration::ZERO;
         for item in self.timers.iter_mut() {
             item.reset();
@@ -221,21 +218,16 @@ impl Daemon {
     fn update_timer(&mut self) {
         // Determine the next timer
         for item in self.timers.iter_mut() {
-            let mut in_timeout = false;
-            let mut time_left = Duration::MAX;
-            // Before timeout
-            if let Some(timeout) = item.timer.timeout {
-                if self.elapsed <= timeout {
-                    time_left = timeout - self.elapsed;
-                    in_timeout = true;
-                }
-            }
-            if !in_timeout {
-                // After timeout: every constant interval
-                time_left = item.timer.interval
+            item.time_left = if let Some(initial_delay) = item.timer.initial_delay
+                && self.elapsed <= initial_delay
+            {
+                // Before the initial delay
+                initial_delay - self.elapsed
+            } else {
+                // After the initial delay: at every interval
+                item.timer.interval
                     - Duration::from_secs(self.elapsed.as_secs() % item.timer.interval.as_secs())
             }
-            item.time_left = time_left;
         }
 
         // Sort first by duration and then by type
@@ -245,13 +237,11 @@ impl Daemon {
                 .then(b.timer.weight.cmp(&a.timer.weight))
         });
 
-        // First item is the next break
+        // The first itmer is the next one
         if let Some(next) = self.timers.first_mut() {
-            let next_duration = next.time_left;
-
             // The decline function, the iterval will be multiplied by 0.5 with a decline of 1.0
             let decline_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
-            let time_left = Duration::from_secs_f64(next_duration.as_secs_f64() * decline_mult);
+            let time_left = Duration::from_secs_f64(next.time_left.as_secs_f64() * decline_mult);
             log::debug!(
                 "Decline mult: {}, time: {:?}, prompt: {}",
                 decline_mult,
@@ -262,7 +252,7 @@ impl Daemon {
 
             println!("Next break over {}", time_left.display());
 
-            self.time_left = self.elapsed + time_left;
+            self.next_timer_at = self.elapsed + time_left;
             self.next_timer = Some(next.timer.clone());
         } else {
             log::error!("No timers found! Make sure to specify at least one in the config.");
@@ -314,10 +304,10 @@ impl Daemon {
 
     fn handle_msg(&mut self, msg: IpcRequest) -> Result<IpcResponse> {
         Ok(match msg {
-            IpcRequest::Status => IpcResponse::Status(Status::new(self.time_left)),
+            IpcRequest::Status => IpcResponse::Status(Status::new(self.next_timer_at)),
             IpcRequest::Toggle => {
-                self.enabled = !self.enabled;
-                log::info!("Set enabled to {}", self.enabled);
+                self.is_enabled = !self.is_enabled;
+                log::info!("Set enabled to {}", self.is_enabled);
                 IpcResponse::Ok
             }
             IpcRequest::Reset => {

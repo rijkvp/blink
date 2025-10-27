@@ -6,8 +6,8 @@ use std::{fs, path::PathBuf, time::Duration};
 pub struct Config {
     pub timers: Vec<Timer>,
     pub input_tracking: Option<InputTracking>,
-    #[serde(with = "duration_format")]
-    pub timeout_reset: Duration,
+    #[serde(with = "duration_format_opt")]
+    pub timeout_reset: Option<Duration>,
 }
 
 impl Config {
@@ -37,13 +37,6 @@ pub struct Notification {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct Sound {
-    pub path: PathBuf,
-    #[serde(with = "duration_format")]
-    pub duration: Duration,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct InputTracking {
     #[serde(with = "duration_format")]
     pub inactivity_pause: Duration,
@@ -57,10 +50,10 @@ pub struct Timer {
     pub interval: Duration,
     #[serde(
         default,
-        with = "duration_format_option",
+        with = "duration_format_opt",
         skip_serializing_if = "Option::is_none"
     )]
-    pub timeout: Option<Duration>,
+    pub initial_delay: Option<Duration>,
     #[serde(default, skip_serializing_if = "is_default")]
     pub weight: u8,
     #[serde(default, skip_serializing_if = "is_default")]
@@ -68,7 +61,7 @@ pub struct Timer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notification: Option<Notification>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sound: Option<Sound>,
+    pub sound: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
 }
@@ -112,7 +105,7 @@ impl Default for Config {
                 inactivity_pause: Duration::from_secs(30),
                 inactivity_reset: Duration::from_secs(60 * 2),
             }),
-            timeout_reset: Duration::from_secs(60 * 3),
+            timeout_reset: None,
         }
     }
 }
@@ -150,7 +143,7 @@ mod duration_format {
     }
 }
 
-mod duration_format_option {
+mod duration_format_opt {
     use super::duration_format;
     use serde::{Deserializer, Serializer, de::Error};
     use std::time::Duration;
