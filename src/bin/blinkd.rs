@@ -227,8 +227,13 @@ impl Daemon {
             {
                 // Before the initial delay
                 initial_delay - self.elapsed
+            } else if let Some(initial_delay) = item.timer.initial_delay {
+                // After the initial delay: at every interval, relative to when initial delay ended
+                let elapsed_since_initial = self.elapsed - initial_delay;
+                item.timer.interval
+                    - Duration::from_secs(elapsed_since_initial.as_secs() % item.timer.interval.as_secs())
             } else {
-                // After the initial delay: at every interval
+                // No initial delay: at every interval from the start
                 item.timer.interval
                     - Duration::from_secs(self.elapsed.as_secs() % item.timer.interval.as_secs())
             }
