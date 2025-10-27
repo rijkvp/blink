@@ -231,7 +231,9 @@ impl Daemon {
                 // After the initial delay: at every interval, relative to when initial delay ended
                 let elapsed_since_initial = self.elapsed - initial_delay;
                 item.timer.interval
-                    - Duration::from_secs(elapsed_since_initial.as_secs() % item.timer.interval.as_secs())
+                    - Duration::from_secs(
+                        elapsed_since_initial.as_secs() % item.timer.interval.as_secs(),
+                    )
             } else {
                 // No initial delay: at every interval from the start
                 item.timer.interval
@@ -249,19 +251,20 @@ impl Daemon {
         // The first timer is the next one
         if let Some(next) = self.timers.first_mut() {
             // The decline function, the interval will be multiplied by 0.5 with a decline of 1.0
-            let decline_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
-            let time_left = Duration::from_secs_f64(next.time_left.as_secs_f64() * decline_mult);
+            let interval_mult = (1.0 / (1.0 + next.timer.decline)).powf(next.prompts as f64);
+            let interval =
+                Duration::from_secs((next.time_left.as_secs_f64() * interval_mult).round() as u64);
             log::debug!(
-                "Decline mult: {}, time: {:?}, prompt: {}",
-                decline_mult,
-                time_left,
+                "Next interval: {:?}, multiplier: {} (prompt: {})",
+                interval,
+                interval_mult,
                 next.prompts
             );
             next.prompts += 1;
 
-            log::info!("Next break over {}", time_left.display());
+            log::info!("Next break over {}", interval.display());
 
-            self.next_timer_at = self.elapsed + time_left;
+            self.next_timer_at = self.elapsed + interval;
             self.next_timer = Some(next.timer.clone());
         } else {
             log::error!("No timers found! Make sure to specify at least one in the config.");
