@@ -116,9 +116,15 @@ mod duration_format {
         S: Serializer,
     {
         let total_secs = duration.as_secs();
-        let mins = total_secs / 60;
-        let secs = total_secs - mins * 60;
-        serializer.serialize_str(&(format!("{:02}:{:02}", mins, secs)))
+        let hours = total_secs / 3600;
+        let mins = (total_secs % 3600) / 60;
+        let secs = total_secs % 60;
+
+        if hours > 0 {
+            serializer.serialize_str(&format!("{:02}:{:02}:{:02}", hours, mins, secs))
+        } else {
+            serializer.serialize_str(&format!("{:02}:{:02}", mins, secs))
+        }
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
@@ -126,17 +132,49 @@ mod duration_format {
         D: Deserializer<'de>,
     {
         let str = String::deserialize(deserializer)?;
-        let center = str
-            .find(":")
-            .ok_or(Error::custom("missing ':' splitter on duration"))?;
-        let mins = &str[..center]
-            .parse::<u64>()
-            .map_err(|e| Error::custom(format!("failed to parse left integer: {}", e)))?;
-        let secs = &str[center + 1..]
-            .parse::<u64>()
-            .map_err(|e| Error::custom(format!("failed to parse right integer: {}", e)))?;
+        let parts: Vec<&str> = str.split(':').collect();
 
-        Ok(Duration::from_secs(mins * 60 + secs))
+        match parts.len() {
+            2 => {
+                // mm:ss format
+                let mins = parts[0]
+                    .parse::<u64>()
+                    .map_err(|e| Error::custom(format!("failed to parse minutes: {}", e)))?;
+                let secs = parts[1]
+                    .parse::<u64>()
+                    .map_err(|e| Error::custom(format!("failed to parse seconds: {}", e)))?;
+
+                if secs > 59 {
+                    return Err(Error::custom("seconds must be in range 0-59"));
+                }
+
+                Ok(Duration::from_secs(mins * 60 + secs))
+            }
+            3 => {
+                // hh:mm:ss format
+                let hours = parts[0]
+                    .parse::<u64>()
+                    .map_err(|e| Error::custom(format!("failed to parse hours: {}", e)))?;
+                let mins = parts[1]
+                    .parse::<u64>()
+                    .map_err(|e| Error::custom(format!("failed to parse minutes: {}", e)))?;
+                let secs = parts[2]
+                    .parse::<u64>()
+                    .map_err(|e| Error::custom(format!("failed to parse seconds: {}", e)))?;
+
+                if mins > 59 {
+                    return Err(Error::custom("minutes must be in range 0-59"));
+                }
+                if secs > 59 {
+                    return Err(Error::custom("seconds must be in range 0-59"));
+                }
+
+                Ok(Duration::from_secs(hours * 3600 + mins * 60 + secs))
+            }
+            _ => Err(Error::custom(
+                "duration must be in format 'mm:ss' or 'hh:mm:ss'",
+            )),
+        }
     }
 }
 
