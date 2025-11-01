@@ -72,6 +72,7 @@ struct Daemon {
     next_timer: Option<Timer>,
     timers: Vec<TimerState>,
     is_enabled: bool,
+    is_frozen: bool,
     last_input: u64,
 }
 
@@ -90,6 +91,7 @@ impl Daemon {
             next_timer: None,
             timers: state,
             is_enabled: true,
+            is_frozen: false,
             last_input: get_unix_time(),
         }
     }
@@ -170,34 +172,45 @@ impl Daemon {
     }
 
     fn tick(&mut self, now: Instant) {
-        let mut do_reset = false;
-        let mut is_frozen = false;
-
         let delta = now.duration_since(self.last_update);
         self.last_update = now;
 
-        if Some(delta) >= self.config.timeout_reset {
-            log::info!("Resetting timer (delta of {})", delta.display());
-            do_reset = true;
-        } else if Some(self.elapsed) >= self.config.timeout_reset {
-            log::info!("Resetting timer (timeout of {})", self.elapsed.display());
-            do_reset = true;
-        }
-
-        if let Some(input_tracking) = &self.config.input_tracking {
-            let activity_elapsed =
-                Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
-            if activity_elapsed >= input_tracking.inactivity_reset {
-                log::info!("Resetting timer (input timeout {activity_elapsed:?})");
-                do_reset = true;
+        // Check for big delay between ticks, likely caused when the system was suspended
+        // This also counts as input inactivity
+        if self
+            .config
+            .input_tracking
+            .as_ref()
+            .map(|i| i.reset_after)
+            .is_some_and(|timeout_reset| delta >= timeout_reset)
+        {
+            if self.elapsed > Duration::ZERO {
+                log::info!("Resetting timer (update delta of {})", delta.display());
+                self.reset();
+                return;
             }
-            is_frozen = activity_elapsed > input_tracking.inactivity_pause;
+        } else if let Some(input_tracking) = &self.config.input_tracking {
+            // Reset or freeze the timer based on input tracking config
+            let elapsed_since_input =
+                Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
+            if elapsed_since_input >= input_tracking.reset_after {
+                if self.elapsed > Duration::ZERO {
+                    log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
+                    self.reset();
+                    self.is_frozen = true;
+                    return;
+                }
+            }
+            if !self.is_frozen && elapsed_since_input > input_tracking.pause_after {
+                log::trace!("Frozen");
+                self.is_frozen = true;
+            } else if self.is_frozen && elapsed_since_input < Duration::from_secs(3) {
+                log::trace!("Unfrozen");
+                self.is_frozen = false;
+            }
         };
 
-        if do_reset {
-            self.reset();
-        }
-        if !is_frozen && self.is_enabled {
+        if !self.is_frozen && self.is_enabled {
             self.elapsed += delta;
             log::trace!(
                 "Tick {}/{}",
@@ -205,6 +218,7 @@ impl Daemon {
                 self.next_timer_at.display()
             );
         }
+
         if self.elapsed >= self.next_timer_at {
             self.notify();
             self.update_timer();
@@ -212,7 +226,6 @@ impl Daemon {
     }
 
     fn reset(&mut self) {
-        log::trace!("Resetting timers");
         self.elapsed = Duration::ZERO;
         for item in self.timers.iter_mut() {
             item.reset();
@@ -244,11 +257,11 @@ impl Daemon {
             }
         }
 
-        // Sort first by duration and then by type
+        // Sort first by time left and then by interval (timers with longer intervals have priority)
         self.timers.sort_by(|a, b| {
             a.time_left
                 .cmp(&b.time_left)
-                .then(b.timer.weight.cmp(&a.timer.weight))
+                .then(b.timer.interval.cmp(&a.timer.interval))
         });
 
         // The first timer is the next one
@@ -263,8 +276,6 @@ impl Daemon {
                 next.prompts
             );
             next.prompts += 1;
-
-            log::info!("Next break over {}", interval.display());
 
             self.next_timer_at = self.elapsed + interval;
             self.next_timer = Some(next.timer.clone());
@@ -292,7 +303,7 @@ impl Daemon {
                     notification.title,
                     description,
                     notification.timeout.unwrap_or(Duration::from_secs(10)),
-                    timer.weight,
+                    1,
                 );
             }
 
@@ -318,7 +329,9 @@ impl Daemon {
 
     fn handle_msg(&mut self, msg: IpcRequest) -> Result<IpcResponse> {
         Ok(match msg {
-            IpcRequest::Status => IpcResponse::Status(Status::new(self.next_timer_at)),
+            IpcRequest::Status => {
+                IpcResponse::Status(Status::new(self.elapsed, self.next_timer_at))
+            }
             IpcRequest::Toggle => {
                 self.is_enabled = !self.is_enabled;
                 log::info!("Set enabled to {}", self.is_enabled);

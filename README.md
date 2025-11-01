@@ -33,14 +33,12 @@ timers:
     - Time to get a cup of cofee.
     - Time to get away from your desk.
 - interval: 60:00
-  weight: 1
   decline: 0.6
   notification:
     title: Big break
     descriptions:
     - Time to relax. You've been using the computer for {} minutes.
 input_tracking:
-  inactivity_pause: 00:30
-  inactivity_reset: 02:00
-timeout_reset: 03:00
+  pause_after: 00:30
+  reset_after: 02:00
 ```

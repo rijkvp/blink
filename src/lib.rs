@@ -4,7 +4,7 @@ pub mod util;
 
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{self, Display},
+    fmt::{self, Display, Write},
     path::PathBuf,
     time::{Duration, SystemTime},
 };
@@ -54,18 +54,24 @@ pub enum IpcResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Status {
-    duration: Duration,
+    elapsed: Duration,
+    next_timer: Duration,
 }
 
 impl Status {
-    pub fn new(duration: Duration) -> Self {
-        Self { duration }
+    pub fn new(elapsed: Duration, next_timer: Duration) -> Self {
+        Self {
+            elapsed,
+            next_timer,
+        }
     }
 }
 
 impl Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        format_duration(f, self.duration)?;
+        format_duration(f, self.elapsed)?;
+        f.write_char('/')?;
+        format_duration(f, self.next_timer)?;
         Ok(())
     }
 }

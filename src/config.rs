@@ -3,11 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, time::Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub timers: Vec<Timer>,
     pub input_tracking: Option<InputTracking>,
-    #[serde(with = "duration_format_opt")]
-    pub timeout_reset: Option<Duration>,
 }
 
 impl Config {
@@ -29,6 +28,7 @@ impl Config {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Notification {
     pub title: String,
     pub descriptions: Vec<String>,
@@ -39,12 +39,13 @@ pub struct Notification {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct InputTracking {
     #[serde(with = "duration_format")]
-    pub inactivity_pause: Duration,
+    pub pause_after: Duration,
     #[serde(with = "duration_format")]
-    pub inactivity_reset: Duration,
+    pub reset_after: Duration,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Timer {
     #[serde(with = "duration_format")]
     pub interval: Duration,
@@ -54,8 +55,6 @@ pub struct Timer {
         skip_serializing_if = "Option::is_none"
     )]
     pub initial_delay: Option<Duration>,
-    #[serde(default, skip_serializing_if = "is_default")]
-    pub weight: u8,
     #[serde(default, skip_serializing_if = "is_default")]
     pub decline: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,16 +95,14 @@ impl Default for Config {
                         ],
                         ..Default::default()
                     }),
-                    weight: 1,
                     decline: 0.6,
                     ..Default::default()
                 },
             ],
             input_tracking: Some(InputTracking {
-                inactivity_pause: Duration::from_secs(30),
-                inactivity_reset: Duration::from_secs(60 * 2),
+                pause_after: Duration::from_secs(30),
+                reset_after: Duration::from_secs(60 * 2),
             }),
-            timeout_reset: None,
         }
     }
 }
