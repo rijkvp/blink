@@ -6,7 +6,7 @@ Blink is a program that helps you to remember to take breaks (and blink your eye
 
 ## Features
 
-- ⏰ Configure multiple timers with intervals, weights, timeouts & declining prompts.
+- ⏰ Configure multiple timers with different intervals.
 - 🔔 Get a notification and play a sound when its time to take a break.
 - ⌨️ Have timers automatically pause or reset when you are AFK.
 
@@ -16,8 +16,26 @@ You can download the latest executable from [GitHub releases](https://github.com
 
 ## Usage
 
-Run the executable in the background. 
+Run the `blinkd` daemon in the background.
 You probably want to automatically start the program when your PC boots.
+
+On Linux, you can use the following systemd user service:
+
+```ini
+[Install]
+WantedBy=default.target
+
+[Service]
+Type=simple
+# change this to your install location
+ExecStart=~/.local/bin/blinkd 
+
+[Unit]
+Description=blinkd - break timer daemon
+After=default.target
+```
+
+Place this file in `~/.config/systemd/user/blinkd.service` and enable it with `systemd --user enable blinkd --now`.
 
 ## Configuration
 
