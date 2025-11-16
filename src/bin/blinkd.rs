@@ -294,7 +294,7 @@ impl Daemon {
                         let rand_index = rand::random_range(0..notification.descriptions.len());
                         &notification.descriptions[rand_index]
                     } else {
-                        "{} minutes elapsed."
+                        "{} elapsed"
                     }
                 };
                 let description =
@@ -334,7 +334,7 @@ impl Daemon {
             }
             IpcRequest::Toggle => {
                 self.is_enabled = !self.is_enabled;
-                log::info!("Set enabled to {}", self.is_enabled);
+                log::info!("Set enabled to: {}", self.is_enabled);
                 IpcResponse::Ok
             }
             IpcRequest::Reset => {

@@ -76,21 +76,22 @@ impl Default for Config {
                 Timer {
                     interval: Duration::from_secs(60 * 20),
                     notification: Some(Notification {
-                        title: String::from("Small break"),
+                        title: String::from("Microbreak"),
                         descriptions: vec![
-                            "Time to get a cup of cofee.".to_string(),
-                            "Time to get away from your desk.".to_string(),
+                            "Look away from your screen for 20 seconds.".to_string(),
+                            "Roll your shoulders and stretch your neck.".to_string(),
+                            "Stand up and change your posture.".to_string(),
                         ],
                         ..Default::default()
                     }),
                     ..Default::default()
                 },
                 Timer {
-                    interval: Duration::from_secs(60 * 20 * 3),
+                    interval: Duration::from_secs(60 * 60),
                     notification: Some(Notification {
-                        title: String::from("Big break"),
+                        title: String::from("Take a break"),
                         descriptions: vec![
-                            "Time to relax. You've been using the computer for {} minutes."
+                            "You've been after your screen for {}. Time for a short walk or a stretch!"
                                 .to_string(),
                         ],
                         ..Default::default()
@@ -101,7 +102,7 @@ impl Default for Config {
             ],
             input_tracking: Some(InputTracking {
                 pause_after: Duration::from_secs(30),
-                reset_after: Duration::from_secs(60 * 2),
+                reset_after: Duration::from_secs(60 * 5),
             }),
         }
     }
