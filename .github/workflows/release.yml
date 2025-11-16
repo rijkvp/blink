@@ -1,8 +1,6 @@
 name: Release
 
-on:
-  push:
-    branches: [ "main" ]
+on: push
 
 jobs:
   release_build:
@@ -24,12 +22,22 @@ jobs:
       - name: Tag latest commit
         run: git tag -f latest && git push origin main --tags --force
 
-      - name: Release files
+      - name: Release
         uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: |
+            ./target/release/actived
+            ./target/release/blinkctl
+            ./target/release/blinkd
+
+      - name: Development release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type != 'tag'
         with:
           tag_name: latest
           prerelease: true
-          name: "Latest release"
+          name: "Development build"
           files: |
             ./target/release/actived
             ./target/release/blinkctl
