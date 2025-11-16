@@ -15,6 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install dependenciecs (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt install --no-install-recommends -y libasound2-dev
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
