@@ -12,7 +12,7 @@ Blink is a program that helps you to remember to take breaks (and blink your eye
 
 ## Installation
 
-You can download the latest executable from [GitHub releases](https://github.com/rijkvp/blink/releases).
+You can download the latest binaries from [GitHub releases](https://github.com/rijkvp/blink/releases).
 
 ## Usage
 
@@ -54,7 +54,7 @@ When no config file is found a default `blink.yaml` config file will be generate
 
 ```yaml
 timers:
-- interval: 20:00
+- interval: 20:00 # will notify every 20 minutes
   notification:
     title: Microbreak
     descriptions:
@@ -67,6 +67,17 @@ timers:
     title: Take a break!
     descriptions:
     - You've been at your screen for {}. Time for a short walk or a stretch!
+```
+
+Optionally, you can play a sound (OGG file) or run a command when the timer is over. For example:
+
+```yaml
+timers:
+- interval: 01:00:00
+  sound: /path/to/mysound.ogg
+  command: loginctl lock-session
+  notification:
+    title: Take a break!
 ```
 
 ## Input tracking
@@ -92,5 +103,5 @@ Then input tracking can be enabled by adding the following section to `blink.yam
 ```yaml
 input_tracking:
   pause_after: 00:30
-  reset_after: 02:00
+  reset_after: 05:00
 ```
