@@ -21,6 +21,7 @@ jobs:
 
       - name: Tag latest commit
         run: git tag -f latest && git push origin main --tags --force
+        if: github.ref_type != 'tag'
 
       - name: Release
         uses: softprops/action-gh-release@v2
