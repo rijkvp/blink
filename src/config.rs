@@ -13,15 +13,15 @@ impl Config {
     pub fn load_or_create(path: PathBuf) -> Result<Self> {
         if path.exists() {
             let config_str = fs::read_to_string(&path).context("failed to read config file")?;
-            serde_yaml::from_str::<Self>(&config_str).context("failed to parse config file")
+            serde_yaml_ng::from_str::<Self>(&config_str).context("failed to parse config file")
         } else {
             let default_config = Config::default();
-            let config_str = serde_yaml::to_string(&default_config).unwrap();
+            let config_str = serde_yaml_ng::to_string(&default_config).unwrap();
             if let Some(dir) = path.parent() {
                 fs::create_dir_all(dir).context("failed to create config directory")?;
             }
             fs::write(&path, &config_str).context("failed to write config file")?;
-            println!("Created config file at '{}'", path.display());
+            log::info!("Created default config at '{}'", path.display());
             Ok(default_config)
         }
     }
@@ -89,21 +89,18 @@ impl Default for Config {
                 Timer {
                     interval: Duration::from_secs(60 * 60),
                     notification: Some(Notification {
-                        title: String::from("Take a break"),
+                        title: String::from("Take a break!"),
                         descriptions: vec![
-                            "You've been after your screen for {}. Time for a short walk or a stretch!"
+                            "You've been at your screen for {}. Time for a short walk or a stretch!"
                                 .to_string(),
                         ],
                         ..Default::default()
                     }),
-                    decline: 0.6,
+                    decline: 0.5,
                     ..Default::default()
                 },
             ],
-            input_tracking: Some(InputTracking {
-                pause_after: Duration::from_secs(30),
-                reset_after: Duration::from_secs(60 * 5),
-            }),
+            input_tracking: None,
         }
     }
 }

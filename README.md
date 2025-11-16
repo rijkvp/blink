@@ -17,9 +17,8 @@ You can download the latest executable from [GitHub releases](https://github.com
 ## Usage
 
 Run the `blinkd` daemon in the background.
-You probably want to automatically start the program when your PC boots.
 
-On Linux, you can use the following systemd user service:
+You probably want the program to start automatically, on Linux, you can use the following systemd user service (place it in `/.config/systemd/user`):
 
 ```ini
 [Install]
@@ -35,27 +34,62 @@ Description=blinkd - break timer daemon
 After=default.target
 ```
 
-Place this file in `~/.config/systemd/user/blinkd.service` and enable it with `systemd --user enable blinkd --now`.
+Place this file in `~/.config/systemd/user/blinkd.service` and enable it with `systemctl --user enable blinkd --now`.
+
+The daemon can be controlled with the `blinkctl` program which has the following commands:
+
+```
+Usage: blinkctl <COMMAND>
+
+Commands:
+  status  Get status of current timers
+  toggle  Toggle the timer
+  reset   Reset all timers
+  help    Print this message or the help of the given subcommand(s)
+```
 
 ## Configuration
 
-When no config file is found a default `blink.yaml` config file will be generated like the one below.
-A different config file can be specified using the `--config` flag.
+When no config file is found a default `blink.yaml` config file will be generated like the one below at `~/.config/blink/blink.yaml`. A different config file can optionally be specified using the `--config` flag.
 
 ```yaml
 timers:
 - interval: 20:00
   notification:
-    title: Small break
+    title: Microbreak
     descriptions:
-    - Time to get a cup of cofee.
-    - Time to get away from your desk.
-- interval: 60:00
-  decline: 0.6
+    - Look away from your screen for 20 seconds.
+    - Roll your shoulders and stretch your neck.
+    - Stand up and change your posture.
+- interval: 01:00:00
+  decline: 0.5 # first timer is 1 hour, then 30 minutes, 15 minutes, etc.
   notification:
-    title: Big break
+    title: Take a break!
     descriptions:
-    - Time to relax. You've been using the computer for {} minutes.
+    - You've been at your screen for {}. Time for a short walk or a stretch!
+```
+
+## Input tracking
+
+The optional `actived` daemon can be used on Linux to automatically reset the timers after a period of input inactivity, i.e., no keyboard or mouse input. The daemon must run as root user in order to access keyboard and mouse events. You can use the following systemd service:
+
+```ini
+[Unit]
+Description=actived - activity daemon
+
+[Service]
+Type=simple
+User=root
+# change this to your install location
+ExecStart=/usr/local/bin/actived
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then input tracking can be enabled by adding the following section to `blink.yaml`:
+
+```yaml
 input_tracking:
   pause_after: 00:30
   reset_after: 02:00
