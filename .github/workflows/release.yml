@@ -7,16 +7,12 @@ on:
 jobs:
   release_build:
     name: "Release build"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install dependenciecs (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install dependenciecs
         run: sudo apt install --no-install-recommends -y libasound2-dev
 
       - name: Install Rust toolchain
@@ -35,6 +31,6 @@ jobs:
           prerelease: true
           name: "Latest release"
           files: |
-            ./target/release/actived*
-            ./target/release/blinkctl*
-            ./target/release/blinkd*
+            ./target/release/actived
+            ./target/release/blinkctl
+            ./target/release/blinkd
