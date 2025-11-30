@@ -1,6 +1,6 @@
 [package]
 name = "blink-timer"
-version = "2.0.1"
+version = "2.0.2"
 authors = ["Rijk van Putten <rijk@rijkvp.nl>"]
 edition = "2024"
 description = "A program that helps you to remember to take breaks (and blink your eyes) while using the computer"
