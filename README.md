@@ -27,7 +27,7 @@ WantedBy=default.target
 [Service]
 Type=simple
 # change this to your install location
-ExecStart=~/.local/bin/blinkd 
+ExecStart=%h/.local/bin/blinkd
 
 [Unit]
 Description=blinkd - break timer daemon
@@ -82,7 +82,7 @@ timers:
 
 ## Input tracking
 
-The optional `actived` daemon can be used on Linux to automatically reset the timers after a period of input inactivity, i.e., no keyboard or mouse input. The daemon must run as root user in order to access keyboard and mouse events. You can use the following systemd service:
+The optional `actived` daemon can be used on Linux to automatically reset the timers after a period of input inactivity, i.e. no keyboard or mouse input. The daemon must run as root user in order to access keyboard and mouse events. You can use the following systemd service:
 
 ```ini
 [Unit]
