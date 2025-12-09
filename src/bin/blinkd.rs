@@ -106,12 +106,7 @@ impl Daemon {
             None
         };
 
-        util::show_notification(
-            "Blink".to_string(),
-            "Blink is running.".to_string(),
-            Duration::from_secs(5),
-            0,
-        );
+        util::show_notification("Blink".to_string(), "Blink is running.".to_string(), false);
 
         let mut sigterm = signal(SignalKind::terminate())?;
         let mut sigint = signal(SignalKind::interrupt())?;
@@ -193,13 +188,11 @@ impl Daemon {
             // Reset or freeze the timer based on input tracking config
             let elapsed_since_input =
                 Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
-            if elapsed_since_input >= input_tracking.reset_after {
-                if self.elapsed > Duration::ZERO {
-                    log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
-                    self.reset();
-                    self.is_frozen = true;
-                    return;
-                }
+            if elapsed_since_input >= input_tracking.reset_after && self.elapsed > Duration::ZERO {
+                log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
+                self.reset();
+                self.is_frozen = true;
+                return;
             }
             if !self.is_frozen && elapsed_since_input > input_tracking.pause_after {
                 log::trace!("Frozen");
@@ -299,12 +292,7 @@ impl Daemon {
                 };
                 let description =
                     util::format_string(description, &self.elapsed.display().to_string());
-                util::show_notification(
-                    notification.title,
-                    description,
-                    notification.timeout.unwrap_or(Duration::from_secs(10)),
-                    1,
-                );
+                util::show_notification(notification.title, description, true);
             }
 
             if let Some(sound) = timer.sound {

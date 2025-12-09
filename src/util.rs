@@ -1,11 +1,10 @@
-use notify_rust::Notification;
+use notify_rust::{Notification, Timeout, Urgency};
 use std::{
     fs::File,
     io::BufReader,
     path::PathBuf,
     process::{Command, Stdio},
     thread,
-    time::Duration,
 };
 
 /// Returns a string with the '{}' replaced with the input argument
@@ -24,19 +23,22 @@ fn format_string_test() {
 }
 
 /// Displays a notification with the break info
-pub fn show_notification(title: String, description: String, timeout: Duration, urgency: u8) {
+pub fn show_notification(title: String, description: String, is_important: bool) {
     thread::spawn(move || {
-        let urgency = match urgency {
-            0 => notify_rust::Urgency::Low,
-            1 => notify_rust::Urgency::Normal,
-            2.. => notify_rust::Urgency::Critical,
-        };
         if let Err(e) = Notification::new()
             .appname("blink")
             .summary(&title)
             .body(&description)
-            .urgency(urgency)
-            .timeout(timeout.as_millis() as i32)
+            .timeout(if is_important {
+                Timeout::Never
+            } else {
+                Timeout::Default
+            })
+            .urgency(if is_important {
+                Urgency::Critical
+            } else {
+                Urgency::Low
+            })
             .show()
         {
             log::error!("Failed to show notification: {e}");
