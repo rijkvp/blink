@@ -23,21 +23,25 @@ fn format_string_test() {
 }
 
 /// Displays a notification with the break info
-pub fn show_notification(title: String, description: String, is_important: bool) {
+pub fn show_notification(title: String, description: String, timeout: Option<u32>) {
     thread::spawn(move || {
         if let Err(e) = Notification::new()
             .appname("blink")
             .summary(&title)
             .body(&description)
-            .timeout(if is_important {
-                Timeout::Never
+            .timeout(if let Some(timeout) = timeout {
+                if timeout == 0 {
+                    Timeout::Never
+                } else {
+                    Timeout::Milliseconds(timeout * 1000)
+                }
             } else {
                 Timeout::Default
             })
-            .urgency(if is_important {
+            .urgency(if timeout == Some(0) {
                 Urgency::Critical
             } else {
-                Urgency::Low
+                Urgency::Normal
             })
             .show()
         {

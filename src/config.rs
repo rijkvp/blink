@@ -33,7 +33,7 @@ pub struct Notification {
     pub title: String,
     pub descriptions: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<Duration>,
+    pub timeout: Option<u32>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -82,7 +82,7 @@ impl Default for Config {
                             "Roll your shoulders and stretch your neck.".to_string(),
                             "Stand up and change your posture.".to_string(),
                         ],
-                        ..Default::default()
+                        timeout: Some(10),
                     }),
                     ..Default::default()
                 },
@@ -94,7 +94,7 @@ impl Default for Config {
                             "You've been at your screen for {}. Time for a short walk or a stretch!"
                                 .to_string(),
                         ],
-                        ..Default::default()
+                        timeout: Some(0), // will never time out
                     }),
                     decline: 0.5,
                     ..Default::default()

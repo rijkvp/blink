@@ -67,6 +67,7 @@ timers:
     title: Take a break!
     descriptions:
     - You've been at your screen for {}. Time for a short walk or a stretch!
+    timeout: 10 # seconds to display the notification for (enter 0 no never expire the notification)
 ```
 
 Optionally, you can play a sound (OGG file) or run a command when the timer is over. For example:

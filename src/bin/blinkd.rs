@@ -106,7 +106,7 @@ impl Daemon {
             None
         };
 
-        util::show_notification("Blink".to_string(), "Blink is running.".to_string(), false);
+        util::show_notification("Blink".to_string(), "Blink is running.".to_string(), None);
 
         let mut sigterm = signal(SignalKind::terminate())?;
         let mut sigint = signal(SignalKind::interrupt())?;
@@ -279,7 +279,7 @@ impl Daemon {
 
     fn notify(&self) {
         if let Some(timer) = self.next_timer.clone() {
-            log::info!("Time to take a break!\x07");
+            log::info!("Timer expired: {}\x07", timer.interval.display());
 
             if let Some(notification) = timer.notification {
                 let description = {
@@ -292,7 +292,7 @@ impl Daemon {
                 };
                 let description =
                     util::format_string(description, &self.elapsed.display().to_string());
-                util::show_notification(notification.title, description, true);
+                util::show_notification(notification.title, description, notification.timeout);
             }
 
             if let Some(sound) = timer.sound {
