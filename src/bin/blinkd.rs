@@ -159,7 +159,11 @@ impl Daemon {
                         let mut daemon = daemon.lock().unwrap();
                         daemon.last_input = activity.last_input;
                     }
-                    Err(e) => log::error!("Failed to receive activity message: {e:?}")
+                    Err(e) => {
+                        log::warn!("Activity daemon disconnected: {e:?}");
+                        log::warn!("Disabling input tracking for this session");
+                        activity_stream = None;
+                    }
                 }
             }
         }
