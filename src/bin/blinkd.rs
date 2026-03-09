@@ -300,10 +300,12 @@ impl Daemon {
             }
 
             if let Some(sound) = timer.sound {
+                log::info!("Playing sound '{}'", sound.display());
                 util::play_sound(sound);
             }
 
             if let Some(cmd) = timer.command {
+                log::info!("Running command '{cmd}'");
                 util::exec_command(cmd);
             }
         }

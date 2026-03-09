@@ -1,4 +1,5 @@
 use notify_rust::{Notification, Timeout, Urgency};
+use rodio::DeviceSinkBuilder;
 use std::{
     fs::File,
     io::BufReader,
@@ -53,7 +54,7 @@ pub fn show_notification(title: String, description: String, timeout: Option<u32
 /// Runs a command in a new thread, output is logged when unsuccesful
 pub fn exec_command(command: String) {
     thread::spawn(move || {
-        let output = Command::new("sh")
+        let output = Command::new("/bin/sh")
             .arg("-c")
             .arg(&command)
             .stdin(Stdio::null())
@@ -84,8 +85,8 @@ pub fn exec_command(command: String) {
 /// Loads and plays an audio file in a new thread
 pub fn play_sound(path: PathBuf) {
     thread::spawn(move || {
-        let Ok(mut stream_handle) = rodio::OutputStreamBuilder::open_default_stream() else {
-            log::error!("Failed to open default audio stream");
+        let Ok(mut stream_handle) = DeviceSinkBuilder::open_default_sink() else {
+            log::error!("Failed to open default audio sink");
             return;
         };
         stream_handle.log_on_drop(false);
