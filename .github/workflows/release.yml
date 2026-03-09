@@ -19,26 +19,10 @@ jobs:
       - name: Release mode build
         run: cargo build --release
 
-      - name: Tag latest commit
-        run: git tag -f latest && git push origin main --tags --force
-        if: github.ref_type != 'tag'
-
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          files: |
-            ./target/release/actived
-            ./target/release/blinkctl
-            ./target/release/blinkd
-
-      - name: Development release
-        uses: softprops/action-gh-release@v2
-        if: github.ref_type != 'tag'
-        with:
-          tag_name: latest
-          prerelease: true
-          name: "Development build"
           files: |
             ./target/release/actived
             ./target/release/blinkctl
