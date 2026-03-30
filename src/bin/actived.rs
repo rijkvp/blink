@@ -12,6 +12,7 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::broadcast;
 use tokio_stream::{StreamExt, StreamMap};
@@ -87,6 +88,7 @@ async fn handle_client(
     Ok(())
 }
 
+#[derive(Debug)]
 enum InputEvent {
     Keyboard,
     Mouse,
@@ -114,19 +116,28 @@ async fn run_input_listener(
     for (n, device) in devices.into_iter().enumerate() {
         streams.insert(n, device.into_event_stream()?);
     }
+
+    let mut last_emit = SystemTime::now();
+    let min_interval = Duration::from_millis(500); // tweak this
+
     while let Some((_, Ok(event))) = streams.next().await {
         let event = match event.event_type() {
-            EventType::KEY => Some(InputEvent::Keyboard),
-            EventType::RELATIVE | EventType::ABSOLUTE => Some(InputEvent::Mouse),
-            _ => None,
+            EventType::KEY => InputEvent::Keyboard,
+            EventType::RELATIVE | EventType::ABSOLUTE => InputEvent::Mouse,
+            _ => {
+                continue;
+            }
         };
-        if event.is_some() {
-            let timestamp = blink_timer::get_unix_time();
-            log::debug!("input event received at {timestamp}");
 
-            last_input.store(timestamp, Ordering::Relaxed);
-            let _ = broadcast_tx.send(timestamp);
+        let now = SystemTime::now();
+        if now.duration_since(last_emit).unwrap() <= min_interval {
+            continue;
         }
+        log::debug!("input {event:?} received at {now:?}");
+        last_emit = now;
+        let timestamp = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        last_input.store(timestamp, Ordering::Relaxed);
+        let _ = broadcast_tx.send(timestamp);
     }
     Ok(())
 }
