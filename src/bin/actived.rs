@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use blink_timer::{
     ActivityMessage,
     async_socket::{SocketServer, SocketStream},
+    get_unix_time,
 };
 use evdev::{Device, EventType};
 use std::{
@@ -12,10 +13,13 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 use tokio::sync::broadcast;
 use tokio_stream::{StreamExt, StreamMap};
+
+// Minimum time between emitting events
+const EVENT_COOLDOWN: Duration = Duration::from_millis(500);
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -108,17 +112,18 @@ async fn run_input_listener(
                 || supported.contains(EventType::ABSOLUTE)
         })
         .collect();
+
     if devices.is_empty() {
         bail!("no input devices found! are you running as root?")
     }
     log::info!("listening for events on {} input devices", devices.len());
+
     let mut streams = StreamMap::new();
     for (n, device) in devices.into_iter().enumerate() {
         streams.insert(n, device.into_event_stream()?);
     }
 
-    let mut last_emit = SystemTime::now();
-    let min_interval = Duration::from_millis(500); // tweak this
+    let mut last_emit = Instant::now();
 
     while let Some((_, Ok(event))) = streams.next().await {
         let event = match event.event_type() {
@@ -129,13 +134,14 @@ async fn run_input_listener(
             }
         };
 
-        let now = SystemTime::now();
-        if now.duration_since(last_emit).unwrap() <= min_interval {
+        if last_emit.elapsed() < EVENT_COOLDOWN {
             continue;
         }
-        log::debug!("input {event:?} received at {now:?}");
-        last_emit = now;
-        let timestamp = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        last_emit = Instant::now();
+
+        let timestamp = get_unix_time();
+        log::debug!("input {event:?} received at {timestamp:?}");
+
         last_input.store(timestamp, Ordering::Relaxed);
         let _ = broadcast_tx.send(timestamp);
     }
