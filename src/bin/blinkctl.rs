@@ -54,7 +54,7 @@ impl Client {
                     self.stream.send_and_recv(IpcRequest::Toggle).await?,
                     IpcResponse::Ok
                 ) {
-                    eprintln!("unexpected response from deaemon");
+                    eprintln!("Unexpected response from daemon");
                 }
             }
             Command::Reset => {
@@ -62,7 +62,7 @@ impl Client {
                     self.stream.send_and_recv(IpcRequest::Reset).await?,
                     IpcResponse::Ok
                 ) {
-                    eprintln!("unexpected response from deaemon");
+                    eprintln!("Unexpected response from daemon");
                 }
             }
         };

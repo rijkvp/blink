@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
 
     let config_path = args.config.unwrap_or({
         dirs::config_dir()
-            .context("no config dir available")?
+            .context("No config dir available")?
             .join(APP_NAME)
             .join(APP_NAME.to_string() + ".yaml")
     });

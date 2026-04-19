@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::broadcast;
-use tokio_stream::{StreamExt, StreamMap};
+use tokio::task::JoinSet;
 
 // Minimum time between emitting events
 const EVENT_COOLDOWN: Duration = Duration::from_millis(500);
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
 
         async move {
             if let Err(e) = run_input_listener(broadcast_tx, last_input).await {
-                log::error!("event listener failed: {e}");
+                log::error!("Event listener failed: {e}");
                 process::exit(1);
             }
         }
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     let mut socket_server = SocketServer::create(blink_timer::actived_socket_path(), true)
         .await
-        .context("failed to create socket server")?;
+        .context("Failed to create socket server")?;
     log::info!("listening for client connections");
 
     // Accept and handle clients
@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
         // Spawn a new task for each client
         tokio::spawn(async move {
             if let Err(e) = handle_client(stream, broadcast_rx, last_input).await {
-                log::error!("client handler error: {e:?}");
+                log::error!("Client handler error: {e:?}");
             }
         });
     }
@@ -114,36 +114,48 @@ async fn run_input_listener(
         .collect();
 
     if devices.is_empty() {
-        bail!("no input devices found! are you running as root?")
+        bail!("No input devices found! are you running as root?")
     }
-    log::info!("listening for events on {} input devices", devices.len());
+    log::info!("Listening for events on {} input devices", devices.len());
 
-    let mut streams = StreamMap::new();
-    for (n, device) in devices.into_iter().enumerate() {
-        streams.insert(n, device.into_event_stream()?);
+    let mut set = JoinSet::new();
+    for device in devices {
+        let broadcast_tx = broadcast_tx.clone();
+        let last_input = last_input.clone();
+        set.spawn_blocking(move || run_device_listener(device, broadcast_tx, last_input));
     }
 
-    let mut last_emit = Instant::now();
-
-    while let Some((_, Ok(event))) = streams.next().await {
-        let event = match event.event_type() {
-            EventType::KEY => InputEvent::Keyboard,
-            EventType::RELATIVE | EventType::ABSOLUTE => InputEvent::Mouse,
-            _ => {
-                continue;
-            }
-        };
-
-        if last_emit.elapsed() < EVENT_COOLDOWN {
-            continue;
-        }
-        last_emit = Instant::now();
-
-        let timestamp = get_unix_time();
-        log::debug!("input {event:?} received at {timestamp:?}");
-
-        last_input.store(timestamp, Ordering::Relaxed);
-        let _ = broadcast_tx.send(timestamp);
+    if let Some(result) = set.join_next().await {
+        return result?;
     }
     Ok(())
+}
+
+fn run_device_listener(
+    mut device: Device,
+    broadcast_tx: broadcast::Sender<u64>,
+    last_input: Arc<AtomicU64>,
+) -> Result<()> {
+    let mut last_emit = Instant::now();
+
+    loop {
+        for event in device.fetch_events().context("Failed to fetch events")? {
+            let event = match event.event_type() {
+                EventType::KEY => InputEvent::Keyboard,
+                EventType::RELATIVE | EventType::ABSOLUTE => InputEvent::Mouse,
+                _ => continue,
+            };
+
+            if last_emit.elapsed() < EVENT_COOLDOWN {
+                continue;
+            }
+            last_emit = Instant::now();
+
+            let timestamp = get_unix_time();
+            log::debug!("Input {event:?} received at {timestamp}");
+
+            last_input.store(timestamp, Ordering::Relaxed);
+            let _ = broadcast_tx.send(timestamp);
+        }
+    }
 }
