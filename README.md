@@ -68,6 +68,7 @@ timers:
     descriptions:
     - You've been at your screen for {}. Time for a short walk or a stretch!
     timeout: 10 # seconds to display the notification (enter 0 to never expire the notification)
+show_startup_notification: true # When you start blink, show a notification to indicate it is running.
 ```
 
 Optionally, you can play a sound (OGG file) or run a command when the timer is over. For example:
