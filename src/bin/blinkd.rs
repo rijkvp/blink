@@ -106,7 +106,9 @@ impl Daemon {
             None
         };
 
-        util::show_notification("Blink".to_string(), "Blink is running.".to_string(), None);
+        if self.config.show_startup_notification {
+            util::show_notification("Blink".to_string(), "Blink is running.".to_string(), None);
+        }
 
         let mut sigterm = signal(SignalKind::terminate())?;
         let mut sigint = signal(SignalKind::interrupt())?;

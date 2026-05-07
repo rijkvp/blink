@@ -7,6 +7,11 @@ use std::{fs, path::PathBuf, time::Duration};
 pub struct Config {
     pub timers: Vec<Timer>,
     pub input_tracking: Option<InputTracking>,
+
+    /// Whether or not to show a 'Blink is running' notification at start-up.
+    /// Some users might want to turn this off for scripting,
+    /// or to reduce the amount of notifications shown.
+    pub show_startup_notification: bool,
 }
 
 impl Config {
@@ -101,6 +106,7 @@ impl Default for Config {
                 },
             ],
             input_tracking: None,
+            show_startup_notification: true,
         }
     }
 }
