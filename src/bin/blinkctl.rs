@@ -1,6 +1,6 @@
 use anyhow::Result;
 use blink_timer::{IpcRequest, IpcResponse, async_socket::SocketStream};
-use clap::{Parser};
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<()> {
