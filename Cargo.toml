@@ -24,7 +24,6 @@ rodio = { version = "0.22", default-features = false, features = ["playback","vo
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml_ng = "0.10"
 tokio = { version = "1.52", features = ["full", "rt"] }
-tokio-stream = "0.1"
 
 [profile.release]
 lto = true
