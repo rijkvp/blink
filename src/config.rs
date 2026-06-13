@@ -111,7 +111,7 @@ impl Default for Config {
 }
 
 mod duration_format {
-    use serde::{Deserialize, Deserializer, de::Error};
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -183,7 +183,7 @@ mod duration_format {
 
 mod duration_format_opt {
     use super::duration_format;
-    use serde::{Deserializer, de::Error};
+    use serde::{Deserializer, Serializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>
