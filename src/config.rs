@@ -5,13 +5,12 @@ use std::{fs, path::PathBuf, time::Duration};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    /// Configured timers with different break intervals
     pub timers: Vec<Timer>,
+    /// Optional input tracking
     pub input_tracking: Option<InputTracking>,
-
-    /// Whether or not to show a 'Blink is running' notification at start-up.
-    /// Some users might want to turn this off for scripting,
-    /// or to reduce the amount of notifications shown.
-    pub show_startup_notification: bool,
+    /// Whether to show a 'Blink is running' notification at startup
+    pub startup_notification: bool,
 }
 
 impl Config {
@@ -105,14 +104,14 @@ impl Default for Config {
                     ..Default::default()
                 },
             ],
-            input_tracking: None,
-            show_startup_notification: true,
+            input_tracking: None, // disabled by default
+            startup_notification: true,
         }
     }
 }
 
 mod duration_format {
-    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+    use serde::{Deserialize, Deserializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -184,7 +183,7 @@ mod duration_format {
 
 mod duration_format_opt {
     use super::duration_format;
-    use serde::{Deserializer, Serializer, de::Error};
+    use serde::{Deserializer, de::Error};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>

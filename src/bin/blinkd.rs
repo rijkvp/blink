@@ -106,7 +106,7 @@ impl Daemon {
             None
         };
 
-        if self.config.show_startup_notification {
+        if self.config.startup_notification {
             util::show_notification("Blink".to_string(), "Blink is running.".to_string(), None);
         }
 
