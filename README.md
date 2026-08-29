@@ -54,6 +54,13 @@ When no config file is found a default `blink.yaml` config file will be generate
 
 ```yaml
 timers:
+- interval: 00:20:00 # timers defined at the top take priority if intervals overlap
+  initial_delay: 01:00:00 # will notify every 20 minutes after one hour
+  notification:
+    title: Take a break!
+    descriptions:
+    - You've been at your screen for {}. Time for a short walk or a stretch!
+    timeout: 10 # seconds to display the notification (enter 0 to never expire the notification)
 - interval: 20:00 # will notify every 20 minutes
   notification:
     title: Microbreak
@@ -61,13 +68,6 @@ timers:
     - Look away from your screen for 20 seconds.
     - Roll your shoulders and stretch your neck.
     - Stand up and change your posture.
-- interval: 01:00:00
-  decline: 0.5 # first timer is 1 hour, then 30 minutes, 15 minutes, etc.
-  notification:
-    title: Take a break!
-    descriptions:
-    - You've been at your screen for {}. Time for a short walk or a stretch!
-    timeout: 10 # seconds to display the notification (enter 0 to never expire the notification)
 startup_notification: true # show a notification at startup to indicate it is running
 ```
 

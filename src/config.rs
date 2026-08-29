@@ -79,6 +79,19 @@ impl Default for Config {
             timers: vec![
                 Timer {
                     interval: Duration::from_secs(60 * 20),
+                    initial_delay: Some(Duration::from_secs(60 * 60)),
+                    notification: Some(Notification {
+                        title: String::from("Take a break!"),
+                        descriptions: vec![
+                            "You've been at your screen for {}. Time for a short walk or a stretch!"
+                                .to_string(),
+                        ],
+                        timeout: Some(0), // will never time out
+                    }),
+                    ..Default::default()
+                },
+                Timer {
+                    interval: Duration::from_secs(60 * 20),
                     notification: Some(Notification {
                         title: String::from("Microbreak"),
                         descriptions: vec![
@@ -88,19 +101,6 @@ impl Default for Config {
                         ],
                         timeout: Some(10),
                     }),
-                    ..Default::default()
-                },
-                Timer {
-                    interval: Duration::from_secs(60 * 60),
-                    notification: Some(Notification {
-                        title: String::from("Take a break!"),
-                        descriptions: vec![
-                            "You've been at your screen for {}. Time for a short walk or a stretch!"
-                                .to_string(),
-                        ],
-                        timeout: Some(0), // will never time out
-                    }),
-                    decline: 0.5,
                     ..Default::default()
                 },
             ],

@@ -49,12 +49,15 @@ struct TimerState {
     time_left: Duration,
     prompts: u64,
     timer: Timer,
+
+    index: usize,
 }
 
 impl TimerState {
-    fn new(b: Timer) -> Self {
+    fn new(b: Timer, index: usize) -> Self {
         Self {
             timer: b,
+            index,
             ..Default::default()
         }
     }
@@ -81,7 +84,8 @@ impl Daemon {
         let state = config
             .timers
             .iter()
-            .map(|b| TimerState::new(b.clone()))
+            .enumerate()
+            .map(|(i, b)| TimerState::new(b.clone(), i))
             .collect();
         Self {
             config,
@@ -256,12 +260,10 @@ impl Daemon {
             }
         }
 
-        // Sort first by time left and then by interval (timers with longer intervals have priority)
-        self.timers.sort_by(|a, b| {
-            a.time_left
-                .cmp(&b.time_left)
-                .then(b.timer.interval.cmp(&a.timer.interval))
-        });
+        // Sort first by time left and then by the order the timers are defined in the config file
+        // (timers defined earlier have priority)
+        self.timers
+            .sort_by(|a, b| a.time_left.cmp(&b.time_left).then(a.index.cmp(&b.index)));
 
         // The first timer is the next one
         if let Some(next) = self.timers.first_mut() {
