@@ -10,6 +10,10 @@ license = "GPL-3.0"
 keywords = ["break-timer", "break", "timer", "notifier"]
 categories = ["command-line-utilities"]
 
+[features]
+default = ["wayland"]
+wayland = ["dep:wayland-client", "dep:wayland-protocols"]
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.6", features = ["derive"] }
@@ -24,6 +28,8 @@ rodio = { version = "0.22", default-features = false, features = ["playback","vo
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml_ng = "0.10"
 tokio = { version = "1.53", features = ["full", "rt"] }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols = { version = "0.32", features = ["client", "staging"], optional = true }
 
 [profile.release]
 lto = true

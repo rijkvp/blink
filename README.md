@@ -2,7 +2,7 @@
 
 [![Release](https://github.com/rijkvp/blink/actions/workflows/release.yml/badge.svg)](https://github.com/rijkvp/blink/actions/workflows/release.yml)
 
-Blink is a program that helps you to remember to take breaks (and blink your eyes) while using the computer. 
+Blink is a program that helps you to remember to take breaks (and blink your eyes) while using the computer.
 
 ## Features
 
@@ -35,10 +35,11 @@ After=default.target
 ```
 
 Place this file in `~/.config/systemd/user/blinkd.service` and enable it with `systemctl --user enable blinkd --now`.
+If you use the [Wayland backend](#wayland-backend) for input tracking, use the service described there instead.
 
 The daemon can be controlled with the `blinkctl` program which has the following commands:
 
-```
+```text
 Usage: blinkctl <COMMAND>
 
 Commands:
@@ -84,7 +85,21 @@ timers:
 
 ## Input tracking
 
-The optional `actived` daemon can be used on Linux to automatically reset the timers after a period of input inactivity, i.e. no keyboard or mouse input. The daemon must run as root user in order to access keyboard and mouse events. You can use the following systemd service:
+Blink can automatically pause the timers after a short period of input inactivity (i.e. no keyboard or mouse input), and reset them after a longer one.
+Input tracking can be enabled by adding the following section to `blink.yaml`:
+
+```yaml
+input_tracking:
+  backend: wayland # or 'actived' (the default)
+  pause_after: 00:30
+  reset_after: 05:00
+```
+
+### `actived` backend
+
+The bundled `actived` daemon reads keyboard and mouse events directly from the kernel,
+so it works on any Linux system, including X11 and GNOME, where the Wayland backend is not available.
+It must run as root to read these events. You can use the following systemd service:
 
 ```ini
 [Unit]
@@ -100,10 +115,52 @@ ExecStart=/usr/local/bin/actived
 WantedBy=multi-user.target
 ```
 
-Then input tracking can be enabled by adding the following section to `blink.yaml`:
+### Wayland backend
 
-```yaml
-input_tracking:
-  pause_after: 00:30
-  reset_after: 05:00
+On Wayland, `blinkd` can ask the compositor directly through the [`ext-idle-notify-v1`](https://wayland.app/protocols/ext-idle-notify-v1) protocol, so no extra daemon is needed.
+The Wayland backend is part of the `wayland` cargo feature, which is enabled by default.
+This is supported by most compositors, including sway, Hyprland, niri, KWin (KDE Plasma), COSMIC and labwc, but notably not by GNOME (Mutter).
+
+With version 2 of the protocol, only keyboard and mouse input count as activity.
+Compositors that only support version 1 also count idle inhibitors, such as video playback, as activity.
+`blinkd` logs a warning in that case.
+
+If you use this backend, `blinkd` needs `WAYLAND_DISPLAY` in its environment.
+The simplest way to get this is to let your compositor start `blinkd`, so it inherits the environment, e.g. for niri:
+
+```kdl
+spawn-at-startup "blinkd"
 ```
+
+or for Hyprland:
+
+```ini
+exec-once = blinkd
+```
+
+or for sway:
+
+```text
+exec blinkd
+```
+
+Alternatively, run it as a systemd user service that is part of the graphical session:
+
+```ini
+[Unit]
+Description=blinkd - break timer daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# change this to your install location
+ExecStart=%h/.local/bin/blinkd
+
+[Install]
+WantedBy=graphical-session.target
+```
+
+Systemd-integrated sessions (e.g. KDE Plasma, niri or [uwsm](https://github.com/Vladimir-csp/uwsm)) export `WAYLAND_DISPLAY` to systemd automatically.
+Otherwise, you have to run `systemctl --user import-environment WAYLAND_DISPLAY` from your compositor's startup config,
+before the service starts.

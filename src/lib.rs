@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod async_socket;
 pub mod config;
 pub mod util;
