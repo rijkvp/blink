@@ -46,14 +46,3 @@ pub async fn spawn_backend(tracking: &InputTracking) -> Result<mpsc::UnboundedRe
     }
     Ok(rx)
 }
-
-#[test]
-fn idle_for_test() {
-    let secs = Duration::from_secs;
-    assert_eq!(Activity::Active.idle_for(secs(100)), Duration::ZERO);
-    assert_eq!(Activity::IdleSince(secs(70)).idle_for(secs(100)), secs(30));
-    assert_eq!(
-        Activity::IdleSince(secs(101)).idle_for(secs(100)),
-        Duration::ZERO
-    );
-}

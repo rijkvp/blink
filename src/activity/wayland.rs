@@ -32,7 +32,7 @@ pub fn spawn(tx: mpsc::UnboundedSender<Activity>, tracking: &InputTracking) -> R
         .context("compositor does not support ext-idle-notify-v1")?;
 
     // Until the compositor reports idleness, the daemon sees the user as active.
-    // The compositor must therefore report before either threshold is reached,
+    // The compositor must therefore report before either threshold is reached.
     // also when `reset_after < pause_after`.
     let idle_timeout = tracking.pause_after.min(tracking.reset_after);
     let timeout = u32::try_from(idle_timeout.as_millis()).unwrap_or(u32::MAX);
@@ -70,8 +70,8 @@ impl Dispatch<ExtIdleNotificationV1, ()> for State {
     ) {
         let activity = match event {
             // The compositor sends this once `idle_timeout` has passed without input.
-            // Backdate it to the last input, so `pause_after` and `reset_after` count from there,
-            // as with `actived`.
+            // Use it to get the time of the last input.
+            // Then we can count just like actived does.
             ext_idle_notification_v1::Event::Idled => {
                 let Some(now_uptime) = get_uptime() else {
                     return;

@@ -222,6 +222,7 @@ mod duration_format_opt {
 #[test]
 fn input_backend_test() {
     let parse = |yaml: &str| serde_yaml_ng::from_str::<InputTracking>(yaml).map(|i| i.backend);
+    // Test for backwards compatibility of the config file.
     // Configs from before the backend option keep using `actived`
     assert!(matches!(
         parse("pause_after: '00:30'\nreset_after: '05:00'"),
