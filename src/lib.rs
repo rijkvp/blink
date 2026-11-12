@@ -5,6 +5,7 @@ pub mod util;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Write},
+    fs,
     path::PathBuf,
     time::{Duration, SystemTime},
 };
@@ -32,6 +33,17 @@ pub fn get_unix_time() -> u64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+/// Time since boot, including time spent suspended.
+/// Returns `None` if `/proc/uptime` cannot be read.
+pub fn get_uptime() -> Option<Duration> {
+    parse_uptime(&fs::read_to_string("/proc/uptime").ok()?)
+}
+
+fn parse_uptime(uptime: &str) -> Option<Duration> {
+    // The first field is the time since boot in seconds, e.g. "12345.67 54321.00"
+    Duration::try_from_secs_f64(uptime.split_whitespace().next()?.parse().ok()?).ok()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
