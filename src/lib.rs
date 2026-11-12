@@ -35,8 +35,8 @@ pub fn get_unix_time() -> u64 {
         .as_secs()
 }
 
-/// Time since boot, including time spent suspended.
-/// Returns `None` if `/proc/uptime` cannot be read.
+/// Returns the time since boot, including time spent suspended,
+/// or `None` if `/proc/uptime` cannot be read.
 pub fn get_uptime() -> Option<Duration> {
     parse_uptime(&fs::read_to_string("/proc/uptime").ok()?)
 }
