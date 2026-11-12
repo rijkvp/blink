@@ -12,9 +12,11 @@ use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Activity {
-    /// The user is currently active (only reported by edge-triggered backends).
+    /// The user is active.
+    /// This is the state before the backend first reports.
+    /// After that, only the Wayland backend reports it, on input after being idle.
     Active,
-    /// No input since this uptime.
+    /// No input since starting this computer
     /// Does not jump when NTP sets the system clock (unlike unix time).
     IdleSince(Duration),
 }

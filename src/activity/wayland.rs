@@ -49,6 +49,7 @@ pub fn spawn(tx: mpsc::UnboundedSender<Activity>, tracking: &InputTracking) -> R
 
     let mut state = State { tx, idle_timeout };
     thread::spawn(move || {
+        // Only checked after the next event, so the thread may outlive the receiver until then
         while !state.tx.is_closed() {
             if let Err(e) = queue.blocking_dispatch(&mut state) {
                 log::warn!("Wayland connection lost: {e}");

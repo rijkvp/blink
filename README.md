@@ -121,7 +121,7 @@ On Wayland, `blinkd` can ask the compositor directly through the [`ext-idle-noti
 The Wayland backend is part of the `wayland` cargo feature, which is enabled by default.
 This is supported by most compositors, including sway, Hyprland, niri, KWin (KDE Plasma), COSMIC and labwc, but notably not by GNOME (Mutter).
 
-With version 2 of the protocol, only keyboard and mouse input count as activity.
+With version 2 of the protocol, only user input (e.g. keyboard and mouse input) count as activity.
 Compositors that only support version 1 also count idle inhibitors, such as video playback, as activity.
 `blinkd` logs a warning in that case.
 
@@ -161,6 +161,8 @@ ExecStart=%h/.local/bin/blinkd
 WantedBy=graphical-session.target
 ```
 
-Systemd-integrated sessions (e.g. KDE Plasma, niri or [uwsm](https://github.com/Vladimir-csp/uwsm)) export `WAYLAND_DISPLAY` to systemd automatically.
-Otherwise, you have to run `systemctl --user import-environment WAYLAND_DISPLAY` from your compositor's startup config,
-before the service starts.
+Systemd-integrated sessions (e.g. KDE Plasma, niri started with `niri-session`, or [uwsm](https://github.com/Vladimir-csp/uwsm))
+export `WAYLAND_DISPLAY` to systemd and start `graphical-session.target` automatically.
+Otherwise, `graphical-session.target` is never reached, so enabling the service is not enough.
+Instead, run `systemctl --user import-environment WAYLAND_DISPLAY` and then `systemctl --user start blinkd`
+from your compositor's startup config.
