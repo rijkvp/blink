@@ -15,6 +15,7 @@ pub enum Activity {
     /// The user is active.
     /// This is the state before the backend first reports.
     /// After that, only the Wayland backend reports it, on input after being idle.
+    /// The daemon also falls back to it when the backend stops.
     Active,
     /// No input since this uptime (time since boot, including suspends).
     /// Does not jump when NTP sets the system clock (unlike unix time).

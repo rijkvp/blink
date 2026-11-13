@@ -173,6 +173,7 @@ impl Daemon {
                     None => {
                         log::warn!("Input tracking backend stopped");
                         log::warn!("Disabling input tracking for this session");
+                        daemon.lock().unwrap().activity = Activity::Active;
                         activity_rx = None;
                     }
                 }
