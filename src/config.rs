@@ -42,10 +42,22 @@ pub struct Notification {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct InputTracking {
+    #[serde(default)]
+    pub backend: InputBackend,
     #[serde(with = "duration_format")]
     pub pause_after: Duration,
     #[serde(with = "duration_format")]
     pub reset_after: Duration,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InputBackend {
+    /// Input events from the `actived` root daemon
+    #[default]
+    Actived,
+    /// The compositor's `ext-idle-notify-v1` protocol
+    Wayland,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -205,4 +217,20 @@ mod duration_format_opt {
             Err(err) => Err(Error::custom(err)),
         }
     }
+}
+
+#[test]
+fn input_backend_test() {
+    let parse = |yaml: &str| serde_yaml_ng::from_str::<InputTracking>(yaml).map(|i| i.backend);
+    // Test for backwards compatibility of the config file.
+    // Configs from before the backend option keep using `actived`
+    assert!(matches!(
+        parse("pause_after: '00:30'\nreset_after: '05:00'"),
+        Ok(InputBackend::Actived)
+    ));
+    assert!(matches!(
+        parse("backend: wayland\npause_after: '00:30'\nreset_after: '05:00'"),
+        Ok(InputBackend::Wayland)
+    ));
+    assert!(parse("backend: foo\npause_after: '00:30'\nreset_after: '05:00'").is_err());
 }
