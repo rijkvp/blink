@@ -32,8 +32,8 @@ pub fn spawn(tx: mpsc::UnboundedSender<Activity>, tracking: &InputTracking) -> R
         .context("compositor does not support ext-idle-notify-v1")?;
 
     // Until the compositor reports idleness, the daemon sees the user as active.
-    // The compositor must therefore report before either threshold is reached.
-    // also when `reset_after < pause_after`.
+    // The compositor must therefore report before either threshold is reached,
+    // so the timeout is the smaller of the two, even if `reset_after < pause_after`.
     let idle_timeout = tracking.pause_after.min(tracking.reset_after);
     let timeout = u32::try_from(idle_timeout.as_millis()).unwrap_or(u32::MAX);
     if notifier.version() >= 2 {

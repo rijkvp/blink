@@ -16,7 +16,7 @@ pub enum Activity {
     /// This is the state before the backend first reports.
     /// After that, only the Wayland backend reports it, on input after being idle.
     Active,
-    /// No input since starting this computer
+    /// No input since this uptime (time since boot, including suspends).
     /// Does not jump when NTP sets the system clock (unlike unix time).
     IdleSince(Duration),
 }
