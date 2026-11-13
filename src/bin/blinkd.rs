@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use blink_timer::{
-    APP_NAME, ActivityMessage, DurationExt, IpcRequest, IpcResponse, Status,
+    APP_NAME, DurationExt, IpcRequest, IpcResponse, Status,
+    activity::{self, Activity},
     async_socket::{SocketServer, SocketStream},
     config::{Config, Timer},
-    get_unix_time, util,
+    get_uptime, util,
 };
 use clap::Parser;
 use std::{
@@ -71,12 +72,15 @@ struct Daemon {
     config: Config,
     elapsed: Duration,
     last_update: Instant,
+    /// Like `last_update`, but as uptime.
+    /// includes time spent suspended.
+    last_update_uptime: Option<Duration>,
     next_timer_at: Duration,
     next_timer: Option<Timer>,
     timers: Vec<TimerState>,
     is_enabled: bool,
     is_frozen: bool,
-    last_input: u64,
+    activity: Activity,
 }
 
 impl Daemon {
@@ -91,12 +95,13 @@ impl Daemon {
             config,
             elapsed: Duration::ZERO,
             last_update: Instant::now(),
+            last_update_uptime: get_uptime(),
             next_timer_at: Duration::MAX,
             next_timer: None,
             timers: state,
             is_enabled: true,
             is_frozen: false,
-            last_input: get_unix_time(),
+            activity: Activity::Active,
         }
     }
 
@@ -104,8 +109,8 @@ impl Daemon {
         let mut listener = SocketServer::create(blink_timer::socket_path(), true)
             .await
             .context("failed to create socket server")?;
-        let mut activity_stream = if self.config.input_tracking.is_some() {
-            Some(SocketStream::connect(blink_timer::actived_socket_path()).await?)
+        let mut activity_rx = if let Some(input_tracking) = &self.config.input_tracking {
+            Some(activity::spawn_backend(input_tracking).await?)
         } else {
             None
         };
@@ -154,21 +159,22 @@ impl Daemon {
                         }
                     });
                 }
-                activity_msg = async {
-                    if let Some(stream) = &mut activity_stream {
-                        stream.recv::<ActivityMessage>().await
+                activity = async {
+                    if let Some(rx) = &mut activity_rx {
+                        rx.recv().await
                     } else {
                         std::future::pending().await
                     }
-                } => match activity_msg {
-                    Ok(activity) => {
+                } => match activity {
+                    Some(activity) => {
                         let mut daemon = daemon.lock().unwrap();
-                        daemon.last_input = activity.last_input;
+                        daemon.activity = activity;
                     }
-                    Err(e) => {
-                        log::warn!("Activity daemon disconnected: {e:?}");
+                    None => {
+                        log::warn!("Input tracking backend stopped");
                         log::warn!("Disabling input tracking for this session");
-                        activity_stream = None;
+                        daemon.lock().unwrap().activity = Activity::Active;
+                        activity_rx = None;
                     }
                 }
             }
@@ -179,25 +185,39 @@ impl Daemon {
     fn tick(&mut self, now: Instant) {
         let delta = now.duration_since(self.last_update);
         self.last_update = now;
+        let now_uptime = get_uptime();
+        let uptime_delta = match (now_uptime, self.last_update_uptime) {
+            (Some(now_uptime), Some(last_uptime)) => now_uptime.saturating_sub(last_uptime),
+            _ => Duration::ZERO,
+        };
+        self.last_update_uptime = now_uptime;
 
-        // Check for big delay between ticks, likely caused when the system was suspended
-        // This also counts as input inactivity
+        // A big gap between ticks (likely a suspend) counts as input inactivity,
+        // even if input after the resume arrived before this tick.
+        // The Wayland backend needs this: the compositor's idle timer does not count suspended time,
+        // so it can still report `Active` after a long suspend.
+        // Uptime measures the gap, as `Instant` skips suspends and NTP can shift the wall clock.
         if self
             .config
             .input_tracking
             .as_ref()
             .map(|i| i.reset_after)
-            .is_some_and(|timeout_reset| delta >= timeout_reset)
+            .is_some_and(|timeout_reset| uptime_delta >= timeout_reset)
         {
             if self.elapsed > Duration::ZERO {
-                log::info!("Resetting timer (update delta of {})", delta.display());
+                log::info!(
+                    "Resetting timer ({} since the last tick, likely a suspend)",
+                    uptime_delta.display()
+                );
                 self.reset();
                 return;
             }
         } else if let Some(input_tracking) = &self.config.input_tracking {
             // Reset or freeze the timer based on input tracking config
-            let elapsed_since_input =
-                Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
+            // should rarely use fallback value, as it's already checked that uptime can be read.
+            let elapsed_since_input = now_uptime.map_or(Duration::ZERO, |now_uptime| {
+                self.activity.idle_for(now_uptime)
+            });
             if elapsed_since_input >= input_tracking.reset_after && self.elapsed > Duration::ZERO {
                 log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
                 self.reset();
