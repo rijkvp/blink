@@ -169,6 +169,9 @@ impl Daemon {
                         log::warn!("Activity daemon disconnected: {e:?}");
                         log::warn!("Disabling input tracking for this session");
                         activity_stream = None;
+                        let mut daemon = daemon.lock().unwrap();
+                        daemon.config.input_tracking = None;
+                        daemon.is_frozen = false;
                     }
                 }
             }
