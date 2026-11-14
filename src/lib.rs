@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display, Write},
     path::PathBuf,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 pub const APP_NAME: &str = "blink";
@@ -25,13 +25,6 @@ pub fn actived_socket_path() -> PathBuf {
         .join(APP_NAME)
         .join(ACTIVED_NAME)
         .with_extension("sock")
-}
-
-pub fn get_unix_time() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
 }
 
 /// Returns the time since boot, including time spent suspended.
@@ -53,7 +46,8 @@ pub fn get_uptime() -> Duration {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivityMessage {
-    pub last_input: u64,
+    /// The [get_uptime] at the last input.
+    pub last_input: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

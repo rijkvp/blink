@@ -3,7 +3,7 @@ use blink_timer::{
     APP_NAME, ActivityMessage, DurationExt, IpcRequest, IpcResponse, Status,
     async_socket::{SocketServer, SocketStream},
     config::{Config, Timer},
-    get_unix_time, get_uptime, util,
+    get_uptime, util,
 };
 use clap::Parser;
 use std::{
@@ -166,11 +166,7 @@ impl Daemon {
                         std::future::pending().await
                     }
                 } => match activity_msg {
-                    Ok(activity) => {
-                        // Convert on arrival,
-                        // so a later NTP jump of the system clock does not shift it.
-                        daemon.lock().unwrap().last_input = unix_time_to_uptime(activity.last_input);
-                    }
+                    Ok(activity) => daemon.lock().unwrap().last_input = activity.last_input,
                     Err(e) => {
                         log::warn!("Activity daemon disconnected: {e:?}");
                         log::warn!("Disabling input tracking for this session");
@@ -353,10 +349,4 @@ impl Daemon {
             }
         })
     }
-}
-
-fn unix_time_to_uptime(unix_time: u64) -> Duration {
-    // The clock may have jumped since `actived` read it, so clamp the input between boot and now.
-    let ago = Duration::from_secs(get_unix_time().saturating_sub(unix_time));
-    get_uptime().saturating_sub(ago)
 }
