@@ -73,7 +73,7 @@ struct Daemon {
     last_update: Instant,
     /// Like `last_update`, but as uptime.
     /// includes time spent suspended.
-    last_update_uptime: Option<Duration>,
+    last_update_uptime: Duration,
     next_timer_at: Duration,
     next_timer: Option<Timer>,
     timers: Vec<TimerState>,
@@ -101,7 +101,7 @@ impl Daemon {
             timers: state,
             is_enabled: true,
             is_frozen: false,
-            last_input: get_uptime().unwrap_or_default(),
+            last_input: get_uptime(),
         }
     }
 
@@ -110,7 +110,6 @@ impl Daemon {
             .await
             .context("failed to create socket server")?;
         let mut activity_stream = if self.config.input_tracking.is_some() {
-            get_uptime().context("input tracking needs `/proc/uptime`")?;
             Some(SocketStream::connect(blink_timer::actived_socket_path()).await?)
         } else {
             None
@@ -170,9 +169,7 @@ impl Daemon {
                     Ok(activity) => {
                         // Convert on arrival,
                         // so a later NTP jump of the system clock does not shift it.
-                        if let Some(last_input) = unix_time_to_uptime(activity.last_input) {
-                            daemon.lock().unwrap().last_input = last_input;
-                        }
+                        daemon.lock().unwrap().last_input = unix_time_to_uptime(activity.last_input);
                     }
                     Err(e) => {
                         log::warn!("Activity daemon disconnected: {e:?}");
@@ -189,10 +186,7 @@ impl Daemon {
         let delta = now.duration_since(self.last_update);
         self.last_update = now;
         let now_uptime = get_uptime();
-        let uptime_delta = match (now_uptime, self.last_update_uptime) {
-            (Some(now_uptime), Some(last_uptime)) => now_uptime.saturating_sub(last_uptime),
-            _ => Duration::ZERO,
-        };
+        let uptime_delta = now_uptime.saturating_sub(self.last_update_uptime);
         self.last_update_uptime = now_uptime;
 
         // A big gap between ticks (likely a suspend) counts as input inactivity,
@@ -215,10 +209,7 @@ impl Daemon {
             }
         } else if let Some(input_tracking) = &self.config.input_tracking {
             // Reset or freeze the timer based on input tracking config
-            // should rarely use fallback value, as it's already checked that uptime can be read.
-            let elapsed_since_input = now_uptime.map_or(Duration::ZERO, |now_uptime| {
-                now_uptime.saturating_sub(self.last_input)
-            });
+            let elapsed_since_input = now_uptime.saturating_sub(self.last_input);
             if elapsed_since_input >= input_tracking.reset_after && self.elapsed > Duration::ZERO {
                 log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
                 self.reset();
@@ -364,8 +355,8 @@ impl Daemon {
     }
 }
 
-fn unix_time_to_uptime(unix_time: u64) -> Option<Duration> {
+fn unix_time_to_uptime(unix_time: u64) -> Duration {
     // The clock may have jumped since `actived` read it, so clamp the input between boot and now.
     let ago = Duration::from_secs(get_unix_time().saturating_sub(unix_time));
-    Some(get_uptime()?.saturating_sub(ago))
+    get_uptime().saturating_sub(ago)
 }
