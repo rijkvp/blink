@@ -3,7 +3,7 @@ use blink_timer::{
     APP_NAME, ActivityMessage, DurationExt, IpcRequest, IpcResponse, Status,
     async_socket::{SocketServer, SocketStream},
     config::{Config, Timer},
-    get_unix_time, util,
+    get_uptime, util,
 };
 use clap::Parser;
 use std::{
@@ -71,12 +71,16 @@ struct Daemon {
     config: Config,
     elapsed: Duration,
     last_update: Instant,
+    /// Like `last_update`, but as uptime.
+    /// includes time spent suspended.
+    last_update_uptime: Duration,
     next_timer_at: Duration,
     next_timer: Option<Timer>,
     timers: Vec<TimerState>,
     is_enabled: bool,
     is_frozen: bool,
-    last_input: u64,
+    /// Uptime at the last input.
+    last_input: Duration,
 }
 
 impl Daemon {
@@ -91,12 +95,13 @@ impl Daemon {
             config,
             elapsed: Duration::ZERO,
             last_update: Instant::now(),
+            last_update_uptime: get_uptime(),
             next_timer_at: Duration::MAX,
             next_timer: None,
             timers: state,
             is_enabled: true,
             is_frozen: false,
-            last_input: get_unix_time(),
+            last_input: get_uptime(),
         }
     }
 
@@ -161,10 +166,7 @@ impl Daemon {
                         std::future::pending().await
                     }
                 } => match activity_msg {
-                    Ok(activity) => {
-                        let mut daemon = daemon.lock().unwrap();
-                        daemon.last_input = activity.last_input;
-                    }
+                    Ok(activity) => daemon.lock().unwrap().last_input = activity.last_input,
                     Err(e) => {
                         log::warn!("Activity daemon disconnected: {e:?}");
                         log::warn!("Disabling input tracking for this session");
@@ -182,25 +184,31 @@ impl Daemon {
     fn tick(&mut self, now: Instant) {
         let delta = now.duration_since(self.last_update);
         self.last_update = now;
+        let now_uptime = get_uptime();
+        let uptime_delta = now_uptime.saturating_sub(self.last_update_uptime);
+        self.last_update_uptime = now_uptime;
 
-        // Check for big delay between ticks, likely caused when the system was suspended
-        // This also counts as input inactivity
+        // A big gap between ticks (likely a suspend) counts as input inactivity,
+        // even if input after the resume arrived before this tick.
+        // Uptime measures it, as `Instant` skips suspends and NTP can shift the wall clock.
         if self
             .config
             .input_tracking
             .as_ref()
             .map(|i| i.reset_after)
-            .is_some_and(|timeout_reset| delta >= timeout_reset)
+            .is_some_and(|timeout_reset| uptime_delta >= timeout_reset)
         {
             if self.elapsed > Duration::ZERO {
-                log::info!("Resetting timer (update delta of {})", delta.display());
+                log::info!(
+                    "Resetting timer ({} since the last tick, likely a suspend)",
+                    uptime_delta.display()
+                );
                 self.reset();
                 return;
             }
         } else if let Some(input_tracking) = &self.config.input_tracking {
             // Reset or freeze the timer based on input tracking config
-            let elapsed_since_input =
-                Duration::from_secs(blink_timer::get_unix_time() - self.last_input);
+            let elapsed_since_input = now_uptime.saturating_sub(self.last_input);
             if elapsed_since_input >= input_tracking.reset_after && self.elapsed > Duration::ZERO {
                 log::info!("Resetting timer (input timeout {elapsed_since_input:?})");
                 self.reset();

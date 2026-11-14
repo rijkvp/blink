@@ -2,9 +2,9 @@
 /// It is intended to be ran seperately since it needs root permissions to access input devices.
 use anyhow::{Context, Result, bail};
 use blink_timer::{
-    ActivityMessage,
+    ActivityMessage, DurationExt,
     async_socket::{SocketServer, SocketStream},
-    get_unix_time,
+    get_uptime,
 };
 use evdev::{Device, EventType};
 use std::{
@@ -29,18 +29,17 @@ async fn main() -> Result<()> {
         .init();
 
     // Broadcast channel for distributing events to all clients
-    let (broadcast_tx, _) = broadcast::channel::<u64>(100);
+    let (broadcast_tx, _) = broadcast::channel::<Duration>(100);
 
-    // Last input timestamp
-    let last_input = Arc::new(AtomicU64::new(blink_timer::get_unix_time()));
+    let last_input_nanos = Arc::new(AtomicU64::new(get_uptime().as_nanos() as u64));
 
     // Start input listener
     tokio::spawn({
-        let last_input = last_input.clone();
+        let last_input_nanos = last_input_nanos.clone();
         let broadcast_tx = broadcast_tx.clone();
 
         async move {
-            if let Err(e) = run_input_listener(broadcast_tx, last_input).await {
+            if let Err(e) = run_input_listener(broadcast_tx, last_input_nanos).await {
                 log::error!("Event listener failed: {e}");
                 process::exit(1);
             }
@@ -56,11 +55,11 @@ async fn main() -> Result<()> {
     loop {
         let stream = socket_server.accept_client().await?;
         let broadcast_rx = broadcast_tx.subscribe();
-        let last_input = last_input.clone();
+        let last_input_nanos = last_input_nanos.clone();
 
         // Spawn a new task for each client
         tokio::spawn(async move {
-            if let Err(e) = handle_client(stream, broadcast_rx, last_input).await {
+            if let Err(e) = handle_client(stream, broadcast_rx, last_input_nanos).await {
                 log::error!("Client handler error: {e:?}");
             }
         });
@@ -69,24 +68,16 @@ async fn main() -> Result<()> {
 
 async fn handle_client(
     mut stream: SocketStream,
-    mut broadcast_rx: broadcast::Receiver<u64>,
-    last_input: Arc<AtomicU64>,
+    mut broadcast_rx: broadcast::Receiver<Duration>,
+    last_input_nanos: Arc<AtomicU64>,
 ) -> Result<()> {
     // send initial value to the client
-    let timestamp = last_input.load(Ordering::Relaxed);
-    stream
-        .send(&ActivityMessage {
-            last_input: timestamp,
-        })
-        .await?;
+    let last_input = Duration::from_nanos(last_input_nanos.load(Ordering::Relaxed));
+    stream.send(&ActivityMessage { last_input }).await?;
 
     // Listen for events and forward them to the client
-    while let Ok(timestamp) = broadcast_rx.recv().await {
-        stream
-            .send(&ActivityMessage {
-                last_input: timestamp,
-            })
-            .await?;
+    while let Ok(last_input) = broadcast_rx.recv().await {
+        stream.send(&ActivityMessage { last_input }).await?;
     }
 
     Ok(())
@@ -99,8 +90,8 @@ enum InputEvent {
 }
 
 async fn run_input_listener(
-    broadcast_tx: broadcast::Sender<u64>,
-    last_input: Arc<AtomicU64>,
+    broadcast_tx: broadcast::Sender<Duration>,
+    last_input_nanos: Arc<AtomicU64>,
 ) -> Result<()> {
     let devices: Vec<Device> = evdev::enumerate()
         .map(|(_, device)| device)
@@ -121,8 +112,8 @@ async fn run_input_listener(
     let mut set = JoinSet::new();
     for device in devices {
         let broadcast_tx = broadcast_tx.clone();
-        let last_input = last_input.clone();
-        set.spawn_blocking(move || run_device_listener(device, broadcast_tx, last_input));
+        let last_input_nanos = last_input_nanos.clone();
+        set.spawn_blocking(move || run_device_listener(device, broadcast_tx, last_input_nanos));
     }
 
     if let Some(result) = set.join_next().await {
@@ -133,8 +124,8 @@ async fn run_input_listener(
 
 fn run_device_listener(
     mut device: Device,
-    broadcast_tx: broadcast::Sender<u64>,
-    last_input: Arc<AtomicU64>,
+    broadcast_tx: broadcast::Sender<Duration>,
+    last_input_nanos: Arc<AtomicU64>,
 ) -> Result<()> {
     let mut last_emit = Instant::now();
 
@@ -151,11 +142,11 @@ fn run_device_listener(
             }
             last_emit = Instant::now();
 
-            let timestamp = get_unix_time();
-            log::debug!("Input {event:?} received at {timestamp}");
+            let uptime = get_uptime();
+            log::debug!("Input {event:?} received at uptime {}", uptime.display());
 
-            last_input.store(timestamp, Ordering::Relaxed);
-            let _ = broadcast_tx.send(timestamp);
+            last_input_nanos.store(uptime.as_nanos() as u64, Ordering::Relaxed);
+            let _ = broadcast_tx.send(uptime);
         }
     }
 }
